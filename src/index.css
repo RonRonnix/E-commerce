@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/* App shell basics */
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+/* Design tokens (light) */
+:root {
+  --bg: #e7e8ec;
+  --muted: #f3f4f6;
+  --text: #0f172a;
+  --subtle: #6b7280;
+  --brand: #111827;
+  --accent: #252627;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Utility helpers */
+.container-xl {
+  max-width: 90%; 
+  width: 90%;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+.shadow-card {
+  box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.08);
+}
+
+/* Hide scrollbars utility (for carousels) */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}

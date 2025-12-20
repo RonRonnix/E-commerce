@@ -1,0 +1,139 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../components/AuthContext'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useToaster } from '../components/Toaster'
+
+export default function CheckoutPage() {
+  const { user } = useAuth()
+  const nav = useNavigate()
+  const { show } = useToaster()
+  const [items, setItems] = useState<Array<{ product: any, quantity: number }>>([])
+  const [voucherCode, setVoucherCode] = useState('')
+  const [summary, setSummary] = useState<{ subtotalCents: number; shippingCents: number; discountCents: number; totalCents: number } | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<'cod'|'online'>('cod')
+  const [address, setAddress] = useState({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' })
+  const [loading, setLoading] = useState(true)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    fetch('/api/cart', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then((data) => { if (!cancelled) setItems(data) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    // recompute summary whenever voucher changes
+    fetch('/api/checkout/summary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ voucherCode }) })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed'))) 
+      .then(setSummary).catch(() => setSummary(null))
+  }, [voucherCode])
+
+  const price = (cents: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format((cents || 0)/100)
+
+  async function placeOrder() {
+    if (!user) { nav('/profile'); return }
+    const r = await fetch('/api/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ voucherCode: voucherCode || undefined, paymentMethod, address }) })
+    if (!r.ok) { show('Checkout failed'); return }
+    const data = await r.json()
+    if (paymentMethod === 'online' && data.paymentId) {
+      nav(`/payment/${data.paymentId}`)
+    } else {
+      nav(`/orders/${data.orderId}`)
+    }
+  }
+
+  function attemptCheckout() {
+    // minimal address checks before showing confirm
+    if (!address.fullName || !address.phone || !address.addressLine1 || !address.city || !address.region || !address.postalCode) {
+      show('Please fill in all required address fields')
+      return
+    }
+    if (!summary) {
+      show('Order summary not ready yet')
+      return
+    }
+    setConfirmOpen(true)
+  }
+
+  if (loading) return <div className="container-xl py-10">Loading…</div>
+
+  return (
+    <>
+    <section className="container-xl py-10 grid md:grid-cols-3 gap-8">
+      <div className="md:col-span-2 space-y-6">
+        <div className="rounded-xl border bg-white p-4">
+          <h2 className="font-semibold mb-3">Shipping Address</h2>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <input className="border rounded-md px-3 py-2" placeholder="Full name" value={address.fullName} onChange={e=>setAddress({...address, fullName: e.target.value})} />
+            <input className="border rounded-md px-3 py-2" placeholder="Phone" value={address.phone} onChange={e=>setAddress({...address, phone: e.target.value})} />
+            <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 1" value={address.addressLine1} onChange={e=>setAddress({...address, addressLine1: e.target.value})} />
+            <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 2 (optional)" value={address.addressLine2} onChange={e=>setAddress({...address, addressLine2: e.target.value})} />
+            <input className="border rounded-md px-3 py-2" placeholder="City" value={address.city} onChange={e=>setAddress({...address, city: e.target.value})} />
+            <input className="border rounded-md px-3 py-2" placeholder="Region/Province" value={address.region} onChange={e=>setAddress({...address, region: e.target.value})} />
+            <input className="border rounded-md px-3 py-2" placeholder="Postal code" value={address.postalCode} onChange={e=>setAddress({...address, postalCode: e.target.value})} />
+            <input className="border rounded-md px-3 py-2" placeholder="Country" value={address.country} onChange={e=>setAddress({...address, country: e.target.value})} />
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-white p-4">
+          <h2 className="font-semibold mb-3">Payment</h2>
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={paymentMethod==='cod'} onChange={()=>setPaymentMethod('cod')} /> Cash on Delivery</label>
+            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={paymentMethod==='online'} onChange={()=>setPaymentMethod('online')} /> Online Payment</label>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="rounded-xl border bg-white p-4">
+          <h2 className="font-semibold mb-3">Order Summary</h2>
+          <div className="space-y-2 text-sm max-h-60 overflow-auto pr-1">
+            {items.map((i: any) => (
+              <div key={i.product.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <img src={i.product.imageUrl ?? `https://picsum.photos/seed/${i.product.id}/80/80`} alt="" className="h-10 w-10 rounded object-cover" />
+                  <span className="line-clamp-1">{i.product.title}</span>
+                </div>
+                <div>x{i.quantity}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <span>Voucher</span>
+            <input className="border rounded-md px-2 py-1 text-sm w-40" placeholder="Code" value={voucherCode} onChange={e=>setVoucherCode(e.target.value)} />
+          </div>
+          <div className="mt-3 border-t pt-3 text-sm space-y-1">
+            <div className="flex justify-between"><span>Subtotal</span><span>{summary ? price(summary.subtotalCents) : '—'}</span></div>
+            <div className="flex justify-between"><span>Shipping</span><span>{summary ? price(summary.shippingCents) : '—'}</span></div>
+            <div className="flex justify-between"><span>Discount</span><span>-{summary ? price(summary.discountCents) : '—'}</span></div>
+            <div className="flex justify-between font-semibold text-base"><span>Total</span><span>{summary ? price(summary.totalCents) : '—'}</span></div>
+          </div>
+          <button className="mt-4 w-full px-4 py-2 rounded-md bg-black text-white cursor-pointer transition-transform duration-150 hover:scale-[1.02] active:scale-95" onClick={attemptCheckout}>Place Order</button>
+          <div className="mt-2 text-xs text-gray-500">Tip: Use FREESHIP for free delivery.</div>
+        </div>
+      </div>
+  </section>
+    <ConfirmDialog
+      open={confirmOpen}
+      title={paymentMethod === 'online' ? 'Confirm and pay order?' : 'Confirm order?'}
+      message={summary ? `
+Name: ${address.fullName}\n
+Phone: ${address.phone}\n
+Address: ${address.addressLine1}${address.addressLine2 ? ', ' + address.addressLine2 : ''}, ${address.city}, ${address.region}, ${address.postalCode}\n
+Payment: ${paymentMethod.toUpperCase()}\n
+Voucher: ${voucherCode || '—'}\n
+Total: PHP ${(summary.totalCents/100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
+` : undefined}
+      confirmText={paymentMethod === 'online' ? 'Confirm & Pay' : 'Confirm'}
+      cancelText="Review"
+      onConfirm={() => { setConfirmOpen(false); placeOrder() }}
+      onCancel={() => setConfirmOpen(false)}
+    />
+    </>
+  )
+}
