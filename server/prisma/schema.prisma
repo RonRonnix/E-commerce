@@ -23,6 +23,7 @@ model Product {
   cartItems   CartItem[]
   wishlistItems WishlistItem[]
   orderItems  OrderItem[]
+  reviews     Review[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -59,6 +60,7 @@ model User {
   cartItems    CartItem[]
   wishlistItems WishlistItem[]
   orders       Order[]
+  reviews      Review[]
 }
 
 model Role {
@@ -153,4 +155,20 @@ model Payment {
   updatedAt    DateTime @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId])
+  @@index([productId, createdAt])
 }

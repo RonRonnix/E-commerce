@@ -85,6 +85,44 @@ app.get('/api/products/:id', async (req: Request, res: Response) => {
   res.json(product)
 })
 
+app.get('/api/products/:id/reviews', async (req: Request, res: Response) => {
+  const productId = req.params.id
+  const items = await prisma.review.findMany({
+    where: { productId },
+    orderBy: { createdAt: 'desc' },
+    include: { user: { select: { id: true, fullName: true, username: true, avatarUrl: true } } },
+  })
+  const avg = await prisma.review.aggregate({ where: { productId }, _avg: { rating: true }, _count: { _all: true } })
+  res.json({
+    averageRating: Number(avg._avg.rating || 0),
+    total: avg._count._all || 0,
+    items,
+  })
+})
+
+app.post('/api/products/:id/reviews', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const productId = req.params.id
+  const uid = (req as any).user.id as string
+  const schema = z.object({
+    rating: z.number().int().min(1).max(5),
+    comment: z.string().trim().min(5).max(1000),
+  })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
+  const product = await prisma.product.findUnique({ where: { id: productId } })
+  if (!product) return res.status(404).json({ error: 'Product not found' })
+
+  const existing = await prisma.review.findUnique({ where: { productId_userId: { productId, userId: uid } } })
+  if (existing) return res.status(409).json({ error: 'You already reviewed this product' })
+
+  const created = await prisma.review.create({
+    data: { productId, userId: uid, rating: parsed.data.rating, comment: parsed.data.comment },
+    include: { user: { select: { id: true, fullName: true, username: true, avatarUrl: true } } },
+  })
+  res.status(201).json(created)
+}))
+
 app.get('/api/categories', async (_req: Request, res: Response) => {
   const cats = await (prisma as any).category.findMany({ orderBy: { name: 'asc' } })
   res.json(cats)
