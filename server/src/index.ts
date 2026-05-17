@@ -46,14 +46,35 @@ app.get('/api/health', (_req: Request, res: Response) => {
 })
 
 app.get('/api/products', async (_req: Request, res: Response) => {
-  const { category, q } = _req.query as { category?: string; q?: string }
-  const where: any = {}
+  const { category, q, brand, specs, minPrice, maxPrice } = _req.query as { category?: string; q?: string; brand?: string; specs?: string; minPrice?: string; maxPrice?: string }
+  const and: any[] = []
   if (category) {
     // support slug or id
     const cat = await (prisma as any).category.findFirst({ where: { OR: [{ slug: String(category) }, { id: String(category) }] } })
-    if (cat) where.categoryId = cat.id
+    if (cat) and.push({ categoryId: cat.id })
   }
-  if (q) where.title = { contains: String(q), mode: 'insensitive' }
+  if (q) {
+    const needle = String(q)
+    and.push({ OR: [
+      { title: { contains: needle, mode: 'insensitive' } },
+      { description: { contains: needle, mode: 'insensitive' } },
+      { specs: { contains: needle, mode: 'insensitive' } },
+      { brand: { contains: needle, mode: 'insensitive' } },
+    ] })
+  }
+  if (brand) and.push({ brand: { contains: String(brand), mode: 'insensitive' } })
+  if (specs) and.push({ specs: { contains: String(specs), mode: 'insensitive' } })
+
+  const min = Number(minPrice)
+  const max = Number(maxPrice)
+  if (!Number.isNaN(min) || !Number.isNaN(max)) {
+    const priceWhere: any = {}
+    if (!Number.isNaN(min)) priceWhere.gte = Math.max(0, Math.round(min * 100))
+    if (!Number.isNaN(max)) priceWhere.lte = Math.max(0, Math.round(max * 100))
+    and.push({ priceCents: priceWhere })
+  }
+
+  const where = and.length ? { AND: and } : undefined
   const products = await prisma.product.findMany({ where, orderBy: { createdAt: 'desc' } })
   res.json(products)
 })
@@ -67,6 +88,17 @@ app.get('/api/products/:id', async (req: Request, res: Response) => {
 app.get('/api/categories', async (_req: Request, res: Response) => {
   const cats = await (prisma as any).category.findMany({ orderBy: { name: 'asc' } })
   res.json(cats)
+})
+
+app.get('/api/brands', async (_req: Request, res: Response) => {
+  const rows = await prisma.product.findMany({
+    where: { brand: { not: null } },
+    select: { brand: true },
+    distinct: ['brand'],
+    orderBy: { brand: 'asc' },
+  })
+  const brands = rows.map(r => r.brand).filter(Boolean)
+  res.json(brands)
 })
 
 // Cart endpoints (per-user)
@@ -484,10 +516,12 @@ app.post('/api/admin/products', requireAuth, requireRole('admin','owner'), async
   const priceCents = Number(body.priceCents ?? 0)
   const currency = String(body.currency ?? 'PHP')
   const description = body.description ? String(body.description) : undefined
+  const brand = body.brand ? String(body.brand) : undefined
+  const specs = body.specs ? String(body.specs) : undefined
   const categoryId = body.categoryId ? String(body.categoryId) : undefined
   if (!title || !slug || !priceCents) return res.status(400).json({ error: 'Missing required fields' })
   try {
-  const product = await prisma.product.create({ data: { title, slug, description, priceCents, currency, ...(categoryId ? { category: { connect: { id: categoryId } } } : {}) } })
+  const product = await prisma.product.create({ data: { title, slug, description, brand, specs, priceCents, currency, ...(categoryId ? { category: { connect: { id: categoryId } } } : {}) } })
     return res.status(201).json(product)
   } catch (e: any) {
     if (e?.code === 'P2002') return res.status(409).json({ error: 'Slug already exists' })
@@ -496,8 +530,8 @@ app.post('/api/admin/products', requireAuth, requireRole('admin','owner'), async
 }))
 
 app.put('/api/admin/products/:id', requireAuth, requireRole('admin','owner'), asyncHandler(async (req: Request, res: Response) => {
-  const { title, slug, description, priceCents, currency, categoryId, imageUrl } = req.body || {}
-  const data: any = { title, slug, description, priceCents: priceCents ? Number(priceCents) : undefined, currency, imageUrl }
+  const { title, slug, description, brand, specs, priceCents, currency, categoryId, imageUrl } = req.body || {}
+  const data: any = { title, slug, description, brand, specs, priceCents: priceCents ? Number(priceCents) : undefined, currency, imageUrl }
   if (typeof categoryId === 'string' && categoryId) data.category = { connect: { id: categoryId } }
   const product = await prisma.product.update({ where: { id: req.params.id }, data })
   res.json(product)

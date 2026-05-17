@@ -16,21 +16,72 @@ export default function CatalogPage() {
   const [products, setProducts] = useState<ApiProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [categories, setCategories] = useState<Category[]>([])
+  const allBrands = [
+    'AMD',
+    'NVIDIA',
+    'Intel',
+    'ASUS',
+    'MSI',
+    'Gigabyte',
+    'ASRock',
+    'Corsair',
+    'G.Skill',
+    'Kingston',
+    'Crucial',
+    'Samsung',
+    'Western Digital',
+    'Seagate',
+    'Cooler Master',
+    'NZXT',
+    'EVGA',
+    'Seasonic',
+    'Thermaltake',
+    'Noctua',
+    'AOC',
+    'LG',
+    'Dell',
+    'BenQ',
+  ]
+  const brandByCategory: Record<string, string[]> = {
+    cpu: ['AMD', 'Intel'],
+    'graphics-cards': ['NVIDIA', 'AMD', 'ASUS', 'MSI', 'Gigabyte', 'ZOTAC', 'Sapphire', 'PowerColor'],
+    ram: ['Corsair', 'G.Skill', 'Kingston', 'Crucial', 'TeamGroup', 'Patriot'],
+    motherboard: ['ASUS', 'MSI', 'Gigabyte', 'ASRock', 'Biostar'],
+    'storage-ssd-hdd': ['Kingston', 'Samsung', 'Western Digital', 'Seagate', 'Crucial', 'ADATA', 'Sabrent', 'SK hynix', 'Intel'],
+    storage: ['Kingston', 'Samsung', 'Western Digital', 'Seagate', 'Crucial', 'ADATA', 'Sabrent', 'SK hynix', 'Intel'],
+    'power-supply': ['Seasonic', 'Corsair', 'EVGA', 'Cooler Master', 'Thermaltake', 'NZXT', 'be quiet!'],
+    monitors: ['ASUS', 'MSI', 'Gigabyte', 'AOC', 'LG', 'Dell', 'BenQ', 'Samsung'],
+  }
+  const filteredBrands = selectedSlug && brandByCategory[selectedSlug]
+    ? brandByCategory[selectedSlug]
+    : allBrands
   const [sort, setSort] = useState<'latest' | 'price-asc' | 'price-desc'>('latest')
+  const [query, setQuery] = useState('')
+  const [brand, setBrand] = useState('')
+  const [minPrice, setMinPrice] = useState('')
+  const [maxPrice, setMaxPrice] = useState('')
+  const [specs, setSpecs] = useState('')
 
   useEffect(() => {
     fetch('/api/categories').then(r=>r.ok?r.json():[]).then(setCategories).catch(()=>{})
   }, [])
 
+
   useEffect(() => {
     setLoading(true)
-    const url = selectedSlug ? `/api/products?category=${encodeURIComponent(selectedSlug)}` : '/api/products'
+    const url = new URL('/api/products', window.location.origin)
+    if (selectedSlug) url.searchParams.set('category', selectedSlug)
+    if (query.trim()) url.searchParams.set('q', query.trim())
+    if (brand) url.searchParams.set('brand', brand)
+    if (specs.trim()) url.searchParams.set('specs', specs.trim())
+    if (minPrice) url.searchParams.set('minPrice', minPrice)
+    if (maxPrice) url.searchParams.set('maxPrice', maxPrice)
     fetch(url)
       .then(r => r.ok ? r.json() : Promise.reject(new Error('Bad response')))
       .then((data: ApiProduct[]) => setProducts(data))
       .catch(() => setProducts([]))
       .finally(() => setLoading(false))
-  }, [selectedSlug])
+  }, [selectedSlug, query, brand, minPrice, maxPrice, specs])
 
   const prettyCount = products.length
   const sortedProducts = useMemo(() => {
@@ -66,9 +117,11 @@ export default function CatalogPage() {
             <div>
               <input
                 type="text"
-                placeholder="Search"
+                placeholder="Search products"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
                 className="w-full border rounded-md px-3 py-2 text-sm"
-                aria-label="Search categories"
+                aria-label="Search products"
               />
             </div>
             <div className="space-y-1.5 text-sm">
@@ -90,6 +143,58 @@ export default function CatalogPage() {
               )}
             </div>
           </div>
+          <hr className="my-6 border-gray-200" />
+          <div className="space-y-3">
+            <div className="font-medium">Price Range</div>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="number"
+                min={0}
+                placeholder="Min"
+                value={minPrice}
+                onChange={(e) => setMinPrice(e.target.value)}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              />
+              <input
+                type="number"
+                min={0}
+                placeholder="Max"
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <hr className="my-6 border-gray-200" />
+          <div className="space-y-3">
+            <div className="font-medium">Brand</div>
+            <select value={brand} onChange={(e) => setBrand(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm">
+              <option value="">All brands</option>
+              {filteredBrands.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+          <hr className="my-6 border-gray-200" />
+          <div className="space-y-3">
+            <div className="font-medium">Specs</div>
+            <input
+              type="text"
+              placeholder="e.g. AM5, 12GB, 6000MT/s"
+              value={specs}
+              onChange={(e) => setSpecs(e.target.value)}
+              className="w-full border rounded-md px-3 py-2 text-sm"
+            />
+          </div>
+          {(query || brand || minPrice || maxPrice || specs) && (
+            <button
+              type="button"
+              onClick={() => { setQuery(''); setBrand(''); setMinPrice(''); setMaxPrice(''); setSpecs('') }}
+              className="mt-6 text-sm text-gray-600 hover:underline"
+            >
+              Clear search filters
+            </button>
+          )}
           <hr className="my-6 border-gray-200" />
         </aside>
 

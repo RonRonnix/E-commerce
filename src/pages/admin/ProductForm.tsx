@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 type Category = { id: string; name: string; slug: string }
-type Product = { id: string; title: string; slug: string; description?: string; priceCents: number; currency: string; categoryId?: string; imageUrl?: string }
+type Product = { id: string; title: string; slug: string; description?: string; brand?: string; specs?: string; priceCents: number; currency: string; categoryId?: string; imageUrl?: string }
 type ProductImage = { id: string; url: string; position: number }
 
 export default function ProductForm() {
@@ -35,6 +35,8 @@ export default function ProductForm() {
         product.title === b.title &&
         product.slug === b.slug &&
         (product.description || '') === (b.description || '') &&
+        (product.brand || '') === (b.brand || '') &&
+        (product.specs || '') === (b.specs || '') &&
         product.priceCents === b.priceCents &&
         product.currency === b.currency &&
         (product.categoryId || '') === (b.categoryId || '')
@@ -45,6 +47,8 @@ export default function ProductForm() {
         product.title === b.title &&
         product.slug === b.slug &&
         (product.description || '') === (b.description || '') &&
+        (product.brand || '') === (b.brand || '') &&
+        (product.specs || '') === (b.specs || '') &&
         product.priceCents === b.priceCents &&
         product.currency === b.currency &&
         (product.categoryId || '') === (b.categoryId || '')
@@ -53,13 +57,13 @@ export default function ProductForm() {
   }
 
   useEffect(() => {
-    fetch('/api/categories').then(r=>r.ok?r.json():[]).then(setCategories).catch(()=>{})
+    fetch('/api/categories').then(r=>r.ok?r.json():[]).then(setCategories).catch(() => { /* no-op */ })
   }, [])
 
   useEffect(() => {
     if (!isEdit) return
     fetch(`/api/products/${id}`).then(r=>r.ok?r.json():null).then((p: Product | null) => { if (p) { setProduct(p); setSavedProduct(p) } })
-    fetch(`/api/admin/products/${id}/images`, { credentials:'include' }).then(r=>r.ok?r.json():[]).then(setImages).catch(()=>{})
+    fetch(`/api/admin/products/${id}/images`, { credentials:'include' }).then(r=>r.ok?r.json():[]).then(setImages).catch(() => { /* no-op */ })
   }, [id, isEdit])
 
   const coverUrl = useMemo(() => images.sort((a,b)=>a.position-b.position)[0]?.url || product.imageUrl, [images, product.imageUrl])
@@ -71,7 +75,7 @@ export default function ProductForm() {
       const r = await fetch(`/api/admin/products/${id}`, { method:'DELETE', credentials:'include' })
       if (!r.ok) {
         let msg = 'Delete failed'
-        try { const j = await r.json(); msg = j?.error || msg } catch {}
+        try { const j = await r.json(); msg = j?.error || msg } catch { /* no-op */ }
         throw new Error(msg)
       }
       // After deletion, return to products list
@@ -89,12 +93,12 @@ export default function ProductForm() {
     setSaving(true); setError(null)
     try {
       let pid = product.id
-      const payload = { title: product.title, slug: product.slug, description: product.description, priceCents: product.priceCents, currency: product.currency, categoryId: product.categoryId }
+      const payload = { title: product.title, slug: product.slug, description: product.description, brand: product.brand, specs: product.specs, priceCents: product.priceCents, currency: product.currency, categoryId: product.categoryId }
       if (!isEdit) {
         const r = await fetch('/api/admin/products', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify(payload) })
         if (!r.ok) {
           let msg = 'Create failed'
-          try { const j = await r.json(); msg = j?.error || msg } catch {}
+          try { const j = await r.json(); msg = j?.error || msg } catch { /* no-op */ }
           throw new Error(msg)
         }
         const created: Product = await r.json()
@@ -103,7 +107,7 @@ export default function ProductForm() {
         const r = await fetch(`/api/admin/products/${pid}`, { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify(payload) })
         if (!r.ok) {
           let msg = 'Update failed'
-          try { const j = await r.json(); msg = j?.error || msg } catch {}
+          try { const j = await r.json(); msg = j?.error || msg } catch { /* no-op */ }
           throw new Error(msg)
         }
       }
@@ -117,7 +121,7 @@ export default function ProductForm() {
         const r = await fetch(`/api/admin/products/${pid}/images`, { method:'POST', body: fd, credentials:'include' })
         if (!r.ok) {
           let msg = 'Image upload failed'
-          try { const j = await r.json(); msg = j?.error || msg } catch {}
+          try { const j = await r.json(); msg = j?.error || msg } catch { /* no-op */ }
           throw new Error(msg)
         }
       }
@@ -139,13 +143,13 @@ export default function ProductForm() {
             fetch(`/api/admin/products/${pid}/images`, { credentials:'include' })
               .then(r=>r.ok?r.json():[])
               .then(setImages)
-              .catch(()=>{})
+              .catch(() => { /* no-op */ })
           }
           // Refresh product to reflect any updated fields
           fetch(`/api/products/${pid}`)
             .then(r=>r.ok?r.json():null)
             .then((p: Product | null) => { if (p) { setProduct(p); setSavedProduct(p) } })
-            .catch(()=>{})
+            .catch(() => { /* no-op */ })
         }
       }
     } catch (err:any) {
@@ -215,6 +219,24 @@ export default function ProductForm() {
                 </select>
               ) : (
                 <div className="px-3 py-2 border rounded-md bg-gray-50">{categories.find(c=>c.id===product.categoryId)?.name || '—'}</div>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-600">Brand</label>
+              {editing ? (
+                <input value={product.brand || ''} onChange={e=>setProduct({...product,brand:e.target.value})} className="w-full border rounded-md px-3 py-2" placeholder="AMD, NVIDIA, Corsair" />
+              ) : (
+                <div className="px-3 py-2 border rounded-md bg-gray-50">{product.brand || <span className="text-gray-400">—</span>}</div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600">Specs (short)</label>
+              {editing ? (
+                <input value={product.specs || ''} onChange={e=>setProduct({...product,specs:e.target.value})} className="w-full border rounded-md px-3 py-2" placeholder="Socket: AM5; Cores: 8; Threads: 16" />
+              ) : (
+                <div className="px-3 py-2 border rounded-md bg-gray-50">{product.specs || <span className="text-gray-400">—</span>}</div>
               )}
             </div>
           </div>

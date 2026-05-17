@@ -12,6 +12,8 @@ model Product {
   title       String
   slug        String   @unique
   description String?
+  brand       String?
+  specs       String?
   priceCents  Int
   currency    String   @default("USD")
   imageUrl    String?  // cover image (first ProductImage)
