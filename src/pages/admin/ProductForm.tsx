@@ -5,6 +5,54 @@ type Category = { id: string; name: string; slug: string }
 type Product = { id: string; title: string; slug: string; description?: string; brand?: string; specs?: string; priceCents: number; currency: string; categoryId?: string; imageUrl?: string }
 type ProductImage = { id: string; url: string; position: number }
 
+const ALL_BRANDS = [
+  'AMD',
+  'NVIDIA',
+  'Intel',
+  'ASUS',
+  'MSI',
+  'Gigabyte',
+  'ASRock',
+  'Corsair',
+  'G.Skill',
+  'Kingston',
+  'Crucial',
+  'Samsung',
+  'Western Digital',
+  'Seagate',
+  'Cooler Master',
+  'NZXT',
+  'EVGA',
+  'Seasonic',
+  'Thermaltake',
+  'Noctua',
+  'AOC',
+  'LG',
+  'Dell',
+  'BenQ',
+  'ZOTAC',
+  'Sapphire',
+  'PowerColor',
+  'TeamGroup',
+  'Patriot',
+  'Biostar',
+  'ADATA',
+  'Sabrent',
+  'SK hynix',
+  'be quiet!',
+]
+
+const BRAND_BY_CATEGORY: Record<string, string[]> = {
+  cpu: ['AMD', 'Intel'],
+  'graphics-cards': ['NVIDIA', 'AMD', 'ASUS', 'MSI', 'Gigabyte', 'ZOTAC', 'Sapphire', 'PowerColor'],
+  ram: ['Corsair', 'G.Skill', 'Kingston', 'Crucial', 'TeamGroup', 'Patriot'],
+  motherboard: ['ASUS', 'MSI', 'Gigabyte', 'ASRock', 'Biostar'],
+  'storage-ssd-hdd': ['Kingston', 'Samsung', 'Western Digital', 'Seagate', 'Crucial', 'ADATA', 'Sabrent', 'SK hynix', 'Intel'],
+  storage: ['Kingston', 'Samsung', 'Western Digital', 'Seagate', 'Crucial', 'ADATA', 'Sabrent', 'SK hynix', 'Intel'],
+  'power-supply': ['Seasonic', 'Corsair', 'EVGA', 'Cooler Master', 'Thermaltake', 'NZXT', 'be quiet!'],
+  monitors: ['ASUS', 'MSI', 'Gigabyte', 'AOC', 'LG', 'Dell', 'BenQ', 'Samsung'],
+}
+
 export default function ProductForm() {
   const { id } = useParams()
   const isEdit = !!id && id !== 'new'
@@ -67,6 +115,11 @@ export default function ProductForm() {
   }, [id, isEdit])
 
   const coverUrl = useMemo(() => images.sort((a,b)=>a.position-b.position)[0]?.url || product.imageUrl, [images, product.imageUrl])
+  const selectedCategory = categories.find(c => c.id === product.categoryId)
+  const brandOptions = (selectedCategory?.slug && BRAND_BY_CATEGORY[selectedCategory.slug])
+    ? BRAND_BY_CATEGORY[selectedCategory.slug]
+    : ALL_BRANDS
+  const brandDisabled = !selectedCategory
 
   async function doDelete() {
     if (!isEdit) return
@@ -226,7 +279,10 @@ export default function ProductForm() {
             <div>
               <label className="block text-sm text-gray-600">Brand</label>
               {editing ? (
-                <input value={product.brand || ''} onChange={e=>setProduct({...product,brand:e.target.value})} className="w-full border rounded-md px-3 py-2" placeholder="AMD, NVIDIA, Corsair" />
+                <select value={product.brand || ''} onChange={e=>setProduct({...product,brand:e.target.value || undefined})} className="w-full border rounded-md px-3 py-2" disabled={brandDisabled}>
+                  <option value="">{brandDisabled ? 'Select a category first' : '—'}</option>
+                  {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
               ) : (
                 <div className="px-3 py-2 border rounded-md bg-gray-50">{product.brand || <span className="text-gray-400">—</span>}</div>
               )}

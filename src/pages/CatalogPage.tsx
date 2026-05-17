@@ -55,6 +55,7 @@ export default function CatalogPage() {
   const filteredBrands = selectedSlug && brandByCategory[selectedSlug]
     ? brandByCategory[selectedSlug]
     : allBrands
+  const brandDisabled = !selectedSlug
   const [sort, setSort] = useState<'latest' | 'price-asc' | 'price-desc'>('latest')
   const [query, setQuery] = useState('')
   const [brand, setBrand] = useState('')
@@ -168,8 +169,8 @@ export default function CatalogPage() {
           <hr className="my-6 border-gray-200" />
           <div className="space-y-3">
             <div className="font-medium">Brand</div>
-            <select value={brand} onChange={(e) => setBrand(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm">
-              <option value="">All brands</option>
+            <select value={brand} onChange={(e) => setBrand(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm" disabled={brandDisabled}>
+              <option value="">{brandDisabled ? 'Select a category first' : 'All brands'}</option>
               {filteredBrands.map((b) => (
                 <option key={b} value={b}>{b}</option>
               ))}
