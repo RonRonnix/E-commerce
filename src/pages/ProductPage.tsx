@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { useToaster } from '../components/Toaster'
 import { useCart } from '../components/CartContext'
 import { useWishlist } from '../components/WishlistContext'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 type Product = {
   id: string
@@ -16,7 +17,7 @@ type Product = {
 }
 
 type ReviewUser = { id: string; fullName?: string | null; username?: string | null; avatarUrl?: string | null }
-type Review = { id: string; rating: number; comment: string; createdAt: string; user: ReviewUser }
+type Review = { id: string; rating: number; comment: string; createdAt: string; isHidden?: boolean; user: ReviewUser }
 
 export default function ProductPage() {
   const { id } = useParams()
@@ -38,6 +39,31 @@ export default function ProductPage() {
   const [reviewRating, setReviewRating] = useState(5)
   const [reviewComment, setReviewComment] = useState('')
   const [reviewLoading, setReviewLoading] = useState(false)
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null)
+  const [reviewError, setReviewError] = useState<string | null>(null)
+  const [canReview, setCanReview] = useState(false)
+  const [eligibilityLoading, setEligibilityLoading] = useState(false)
+  const [confirm, setConfirm] = useState<{ open: boolean; action?: 'submit' | 'delete' | 'hide'; reviewId?: string; nextHidden?: boolean }>({ open: false })
+  const isAdmin = !!user?.roles?.some(r => r === 'admin' || r === 'owner')
+
+  async function loadReviews(productId: string, asAdmin: boolean) {
+    const url = asAdmin ? `/api/admin/products/${productId}/reviews` : `/api/products/${productId}/reviews`
+    const r = await fetch(url, { credentials: asAdmin ? 'include' : 'omit' })
+    const data = r.ok ? await r.json() : { items: [], averageRating: 0, total: 0 }
+    setReviews(data.items || [])
+    setReviewsAvg(Number(data.averageRating || 0))
+    setReviewsTotal(Number(data.total || 0))
+  }
+
+  async function getErrorMessage(r: Response, fallback: string) {
+    try {
+      const data = await r.json()
+      const msg = data?.error || data?.detail
+      return msg || fallback
+    } catch {
+      return fallback
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -65,22 +91,26 @@ export default function ProductPage() {
   useEffect(() => {
     let cancelled = false
     if (!id) return
-    fetch(`/api/products/${id}/reviews`)
-      .then(r => r.ok ? r.json() : { items: [], averageRating: 0, total: 0 })
-      .then((data) => {
-        if (cancelled) return
-        setReviews(data.items || [])
-        setReviewsAvg(Number(data.averageRating || 0))
-        setReviewsTotal(Number(data.total || 0))
-      })
-      .catch(() => {
-        if (cancelled) return
-        setReviews([])
-        setReviewsAvg(0)
-        setReviewsTotal(0)
-      })
+    loadReviews(id, isAdmin).catch(() => {
+      if (cancelled) return
+      setReviews([])
+      setReviewsAvg(0)
+      setReviewsTotal(0)
+    })
     return () => { cancelled = true }
-  }, [id])
+  }, [id, isAdmin])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!id || !user) { setCanReview(false); return }
+    setEligibilityLoading(true)
+    fetch(`/api/products/${id}/review-eligibility`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : { canReview: false })
+      .then((data) => { if (!cancelled) setCanReview(!!data.canReview) })
+      .catch(() => { if (!cancelled) setCanReview(false) })
+      .finally(() => { if (!cancelled) setEligibilityLoading(false) })
+    return () => { cancelled = true }
+  }, [id, user?.id])
 
   if (loading) return <div className="container-xl py-10">Loading…</div>
   if (error || !product) return <div className="container-xl py-10 text-red-600">{error || 'Product not found'}</div>
@@ -151,36 +181,80 @@ export default function ProductPage() {
     } finally { setWishLoading(false) }
   }
 
-  async function submitReview(e: React.FormEvent) {
-    e.preventDefault()
+  async function submitReview() {
     if (!user) { navigate('/profile'); return }
     if (!id || reviewLoading) return
     if (!reviewComment.trim()) { show('Please write a review'); return }
     setReviewLoading(true)
+    setReviewError(null)
     try {
-      const r = await fetch(`/api/products/${id}/reviews`, {
-        method: 'POST',
+      const isEdit = !!editingReviewId
+      const url = isEdit ? `/api/reviews/${editingReviewId}` : `/api/products/${id}/reviews`
+      const method = isEdit ? 'PATCH' : 'POST'
+      const r = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ rating: reviewRating, comment: reviewComment.trim() }),
       })
       if (!r.ok) {
-        const msg = r.status === 409 ? 'You already reviewed this product' : 'Failed to submit review'
+        const fallback = r.status === 409 ? 'You already reviewed this product' : 'Failed to submit review'
+        const msg = await getErrorMessage(r, fallback)
+        setReviewError(msg)
         show(msg)
         return
       }
-      const created = await r.json()
-      setReviews(prev => [created, ...prev])
-      const total = reviewsTotal + 1
-      const avg = ((reviewsAvg * reviewsTotal) + reviewRating) / total
-      setReviewsTotal(total)
-      setReviewsAvg(avg)
+      await r.json()
+      if (id) await loadReviews(id, isAdmin)
       setReviewComment('')
       setReviewRating(5)
-      show('Review submitted')
+      setEditingReviewId(null)
+      show(isEdit ? 'Review updated' : 'Review submitted')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to submit review'
+      setReviewError(msg)
+      show(msg)
     } finally {
       setReviewLoading(false)
     }
+  }
+
+  async function startEditReview(review: Review) {
+    setEditingReviewId(review.id)
+    setReviewRating(review.rating)
+    setReviewComment(review.comment)
+  }
+
+  async function deleteReview(reviewId: string) {
+    if (!user) { navigate('/profile'); return }
+    const r = await fetch(`/api/reviews/${reviewId}`, { method: 'DELETE', credentials: 'include' })
+    if (!r.ok) {
+      const msg = await getErrorMessage(r, 'Failed to delete review')
+      show(msg)
+      return
+    }
+    if (id) await loadReviews(id, isAdmin)
+    if (editingReviewId === reviewId) {
+      setEditingReviewId(null)
+      setReviewComment('')
+      setReviewRating(5)
+    }
+  }
+
+  async function toggleReviewHidden(reviewId: string, isHidden: boolean) {
+    const r = await fetch(`/api/admin/reviews/${reviewId}/hide`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ isHidden }),
+    })
+    if (!r.ok) {
+      const msg = await getErrorMessage(r, 'Failed to update review')
+      show(msg)
+      return
+    }
+    await r.json()
+    if (id) await loadReviews(id, isAdmin)
   }
 
   return (
@@ -211,25 +285,26 @@ export default function ProductPage() {
       </section>
 
       <section className="rounded-xl border bg-white p-5">
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <div>
-            <h2 className="text-lg font-semibold">Ratings & Reviews</h2>
-            <div className="text-sm text-gray-600">{reviewsTotal} review{reviewsTotal === 1 ? '' : 's'} • {reviewsAvg.toFixed(1)} / 5</div>
-          </div>
-          <div className="flex items-center gap-1 text-amber-500">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Star key={i} filled={i < Math.round(reviewsAvg)} />
-            ))}
-          </div>
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold">Ratings & Reviews</h2>
+          <div className="text-sm text-gray-600">{reviewsTotal} review{reviewsTotal === 1 ? '' : 's'} • {reviewsAvg.toFixed(1)} / 5</div>
         </div>
 
         {user ? (
-          <form onSubmit={submitReview} className="rounded-lg border p-4 space-y-3 mb-5">
+          <form onSubmit={(e) => {
+            e.preventDefault()
+            if (!reviewComment.trim()) { show('Please write a review'); return }
+            if (!canReview) {
+              const msg = 'Only verified buyers can leave reviews'
+              setReviewError(msg)
+              show(msg)
+              return
+            }
+            setConfirm({ open: true, action: 'submit' })
+          }} className="rounded-lg border p-4 space-y-3 mb-5">
             <div className="flex items-center gap-3">
               <label className="text-sm text-gray-700">Your rating</label>
-              <select value={reviewRating} onChange={e => setReviewRating(Number(e.target.value))} className="border rounded-md px-2 py-1 text-sm">
-                {[5,4,3,2,1].map(n => <option key={n} value={n}>{n} star{n === 1 ? '' : 's'}</option>)}
-              </select>
+              <StarPicker value={reviewRating} onChange={setReviewRating} />
             </div>
             <textarea
               value={reviewComment}
@@ -238,9 +313,20 @@ export default function ProductPage() {
               placeholder="Share your experience"
               className="w-full border rounded-md px-3 py-2 text-sm"
             />
-            <button disabled={reviewLoading} className="px-4 py-2 rounded-md bg-black text-white text-sm disabled:opacity-60">
-              {reviewLoading ? 'Submitting…' : 'Submit review'}
-            </button>
+            {reviewError && <div className="text-sm text-red-600">{reviewError}</div>}
+            {!canReview && !eligibilityLoading && (
+              <div className="text-sm text-amber-700">Only verified buyers can leave a review.</div>
+            )}
+            <div className="flex items-center gap-3">
+              <button disabled={reviewLoading || eligibilityLoading || !canReview} className="px-4 py-2 rounded-md bg-black text-white text-sm disabled:opacity-60">
+                {reviewLoading ? 'Submitting…' : (editingReviewId ? 'Update review' : 'Submit review')}
+              </button>
+              {editingReviewId && (
+                <button type="button" onClick={() => { setEditingReviewId(null); setReviewComment(''); setReviewRating(5) }} className="text-sm text-gray-600 hover:underline">
+                  Cancel edit
+                </button>
+              )}
+            </div>
           </form>
         ) : (
           <div className="mb-5 text-sm text-gray-600">
@@ -273,11 +359,58 @@ export default function ProductPage() {
                   </div>
                 </div>
                 <p className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">{r.comment}</p>
+                <div className="mt-2 flex items-center gap-4 text-sm">
+                  {user?.id === r.user.id && (
+                    <>
+                      <button onClick={() => startEditReview(r)} className="text-gray-700 hover:underline">Edit</button>
+                      <button onClick={() => setConfirm({ open: true, action: 'delete', reviewId: r.id })} className="text-red-600 hover:underline">Delete</button>
+                    </>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => setConfirm({ open: true, action: 'hide', reviewId: r.id, nextHidden: !r.isHidden })} className="text-gray-600 hover:underline">
+                      {r.isHidden ? 'Unhide' : 'Hide'}
+                    </button>
+                  )}
+                  {isAdmin && r.isHidden && <span className="text-xs text-gray-500">Hidden</span>}
+                </div>
               </div>
             ))}
           </div>
         )}
       </section>
+      <ConfirmDialog
+        open={confirm.open}
+        title={confirm.action === 'delete'
+          ? 'Delete this review?'
+          : confirm.action === 'hide'
+            ? (confirm.nextHidden ? 'Hide this review?' : 'Unhide this review?')
+            : (editingReviewId ? 'Update your review?' : 'Submit your review?')}
+        message={confirm.action === 'delete'
+          ? 'This action cannot be undone.'
+          : confirm.action === 'hide'
+            ? (confirm.nextHidden ? 'This review will be hidden from customers.' : 'This review will be visible to customers.')
+            : 'Please confirm your review submission.'}
+        confirmText={confirm.action === 'delete'
+          ? 'Delete'
+          : confirm.action === 'hide'
+            ? (confirm.nextHidden ? 'Hide' : 'Unhide')
+            : (editingReviewId ? 'Update' : 'Submit')}
+        cancelText="Cancel"
+        onCancel={() => setConfirm({ open: false })}
+        onConfirm={async () => {
+          const action = confirm.action
+          const reviewId = confirm.reviewId
+          const nextHidden = confirm.nextHidden
+          setConfirm({ open: false })
+          if (action === 'submit') {
+            await submitReview()
+          } else if (action === 'delete' && reviewId) {
+            await deleteReview(reviewId)
+          } else if (action === 'hide' && reviewId && typeof nextHidden === 'boolean') {
+            await toggleReviewHidden(reviewId, nextHidden)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -287,5 +420,26 @@ function Star({ filled }: { filled: boolean }) {
     <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6">
       <path d="M12 17.27L18.18 21 16.54 13.97 22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
     </svg>
+  )
+}
+
+function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-1 text-amber-500">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const rating = i + 1
+        return (
+          <button
+            key={rating}
+            type="button"
+            className="p-0.5"
+            onClick={() => onChange(rating)}
+            aria-label={`Rate ${rating} star${rating === 1 ? '' : 's'}`}
+          >
+            <Star filled={rating <= value} />
+          </button>
+        )
+      })}
+    </div>
   )
 }

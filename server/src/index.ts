@@ -87,18 +87,60 @@ app.get('/api/products/:id', async (req: Request, res: Response) => {
 
 app.get('/api/products/:id/reviews', async (req: Request, res: Response) => {
   const productId = req.params.id
+  const includeHidden = String((req.query as any).includeHidden || '').toLowerCase() === '1'
   const items = await prisma.review.findMany({
-    where: { productId },
+    where: includeHidden ? { productId } : { productId, isHidden: false },
     orderBy: { createdAt: 'desc' },
     include: { user: { select: { id: true, fullName: true, username: true, avatarUrl: true } } },
   })
-  const avg = await prisma.review.aggregate({ where: { productId }, _avg: { rating: true }, _count: { _all: true } })
+  const avg = await prisma.review.aggregate({
+    where: includeHidden ? { productId } : { productId, isHidden: false },
+    _avg: { rating: true },
+    _count: { _all: true },
+  })
   res.json({
     averageRating: Number(avg._avg.rating || 0),
     total: avg._count._all || 0,
     items,
   })
 })
+
+app.get('/api/admin/products/:id/reviews', requireAuth, requireRole('admin','owner'), asyncHandler(async (req: Request, res: Response) => {
+  const productId = req.params.id
+  const items = await prisma.review.findMany({
+    where: { productId },
+    orderBy: { createdAt: 'desc' },
+    include: { user: { select: { id: true, fullName: true, username: true, avatarUrl: true } } },
+  })
+  const avg = await prisma.review.aggregate({ where: { productId, isHidden: false }, _avg: { rating: true }, _count: { _all: true } })
+  res.json({
+    averageRating: Number(avg._avg.rating || 0),
+    total: avg._count._all || 0,
+    items,
+  })
+}))
+
+async function hasVerifiedPurchase(userId: string, productId: string) {
+  const successfulStatuses = ['paid', 'shipped', 'delivered']
+  const item = await prisma.orderItem.findFirst({
+    where: {
+      productId,
+      order: { userId, status: { in: successfulStatuses } as any },
+    },
+    select: { id: true },
+  })
+  return !!item
+}
+
+app.get('/api/products/:id/review-eligibility', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const productId = req.params.id
+  const uid = (req as any).user.id as string
+  const roles = await prisma.userRole.findMany({ where: { userId: uid }, include: { role: true } })
+  const isAdmin = roles.some(r => r.role.name === 'admin' || r.role.name === 'owner')
+  if (isAdmin) return res.json({ canReview: true })
+  const verified = await hasVerifiedPurchase(uid, productId)
+  res.json({ canReview: verified })
+}))
 
 app.post('/api/products/:id/reviews', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const productId = req.params.id
@@ -116,11 +158,70 @@ app.post('/api/products/:id/reviews', requireAuth, asyncHandler(async (req: Requ
   const existing = await prisma.review.findUnique({ where: { productId_userId: { productId, userId: uid } } })
   if (existing) return res.status(409).json({ error: 'You already reviewed this product' })
 
+  const verified = await hasVerifiedPurchase(uid, productId)
+  if (!verified) return res.status(403).json({ error: 'Only verified buyers can leave reviews' })
+
   const created = await prisma.review.create({
     data: { productId, userId: uid, rating: parsed.data.rating, comment: parsed.data.comment },
     include: { user: { select: { id: true, fullName: true, username: true, avatarUrl: true } } },
   })
   res.status(201).json(created)
+}))
+
+app.patch('/api/reviews/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const reviewId = req.params.id
+  const uid = (req as any).user.id as string
+  const schema = z.object({
+    rating: z.number().int().min(1).max(5),
+    comment: z.string().trim().min(5).max(1000),
+  })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
+  const review = await prisma.review.findUnique({ where: { id: reviewId } })
+  if (!review || review.userId !== uid) return res.status(404).json({ error: 'Review not found' })
+
+  const verified = await hasVerifiedPurchase(uid, review.productId)
+  if (!verified) return res.status(403).json({ error: 'Only verified buyers can update reviews' })
+
+  const updated = await prisma.review.update({
+    where: { id: reviewId },
+    data: { rating: parsed.data.rating, comment: parsed.data.comment },
+    include: { user: { select: { id: true, fullName: true, username: true, avatarUrl: true } } },
+  })
+  res.json(updated)
+}))
+
+app.delete('/api/reviews/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const reviewId = req.params.id
+  const uid = (req as any).user.id as string
+  const review = await prisma.review.findUnique({ where: { id: reviewId } })
+  if (!review) return res.status(404).json({ error: 'Review not found' })
+
+  const roles = await prisma.userRole.findMany({ where: { userId: uid }, include: { role: true } })
+  const isAdmin = roles.some(r => r.role.name === 'admin' || r.role.name === 'owner')
+  if (!isAdmin && review.userId !== uid) return res.status(403).json({ error: 'Forbidden' })
+  if (!isAdmin) {
+    const verified = await hasVerifiedPurchase(uid, review.productId)
+    if (!verified) return res.status(403).json({ error: 'Only verified buyers can delete reviews' })
+  }
+
+  await prisma.review.delete({ where: { id: reviewId } })
+  res.json({ ok: true })
+}))
+
+app.patch('/api/admin/reviews/:id/hide', requireAuth, requireRole('admin','owner'), asyncHandler(async (req: Request, res: Response) => {
+  const reviewId = req.params.id
+  const schema = z.object({ isHidden: z.boolean() })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
+  const updated = await prisma.review.update({
+    where: { id: reviewId },
+    data: { isHidden: parsed.data.isHidden },
+    include: { user: { select: { id: true, fullName: true, username: true, avatarUrl: true } } },
+  })
+  res.json(updated)
 }))
 
 app.get('/api/categories', async (_req: Request, res: Response) => {

@@ -163,6 +163,7 @@ model Review {
   userId    String
   rating    Int
   comment   String
+  isHidden  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
