@@ -20,8 +20,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const r = await fetch('/api/cart', { credentials: 'include' })
       if (!r.ok) { setCount(0); return }
       const items: Array<{ quantity: number }> = await r.json()
-      // Count distinct products, not total quantity
-      setCount(items.length)
+      // Count total quantity for real-time badge updates
+      setCount(items.reduce((sum, i) => sum + (i.quantity || 0), 0))
     } catch { setCount(0) }
   }
 

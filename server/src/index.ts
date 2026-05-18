@@ -49,9 +49,16 @@ app.get('/api/products', async (_req: Request, res: Response) => {
   const { category, q, brand, specs, minPrice, maxPrice } = _req.query as { category?: string; q?: string; brand?: string; specs?: string; minPrice?: string; maxPrice?: string }
   const and: any[] = []
   if (category) {
-    // support slug or id
-    const cat = await (prisma as any).category.findFirst({ where: { OR: [{ slug: String(category) }, { id: String(category) }] } })
-    if (cat) and.push({ categoryId: cat.id })
+    const raw = String(category)
+    const tokens = raw.split(',').map(s => s.trim()).filter(Boolean)
+    if (tokens.length > 0) {
+      const cats = await (prisma as any).category.findMany({ where: { OR: [
+        { slug: { in: tokens } },
+        { id: { in: tokens } },
+      ] } })
+      const ids = cats.map((c: any) => c.id)
+      if (ids.length > 0) and.push({ categoryId: { in: ids } })
+    }
   }
   if (q) {
     const needle = String(q)

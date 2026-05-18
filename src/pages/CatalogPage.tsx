@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import ProductCard from '../components/ProductCard'
 
 type ApiProduct = { id: string; title: string; priceCents: number; imageUrl?: string }
@@ -11,8 +11,12 @@ function useQuery() {
 }
 
 export default function CatalogPage() {
+  const nav = useNavigate()
   const q = useQuery()
-  const selectedSlug = q.get('category') || ''
+  const selectedSlugs = useMemo(() => {
+    const raw = q.get('category') || ''
+    return raw.split(',').map(s => s.trim()).filter(Boolean)
+  }, [q])
   const [products, setProducts] = useState<ApiProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [categories, setCategories] = useState<Category[]>([])
@@ -52,16 +56,24 @@ export default function CatalogPage() {
     'power-supply': ['Seasonic', 'Corsair', 'EVGA', 'Cooler Master', 'Thermaltake', 'NZXT', 'be quiet!'],
     monitors: ['ASUS', 'MSI', 'Gigabyte', 'AOC', 'LG', 'Dell', 'BenQ', 'Samsung'],
   }
-  const filteredBrands = selectedSlug && brandByCategory[selectedSlug]
-    ? brandByCategory[selectedSlug]
-    : allBrands
-  const brandDisabled = !selectedSlug
+  const selectedBrandGroups = useMemo(() => {
+    const groups = selectedSlugs
+      .map(slug => ({ slug, brands: brandByCategory[slug] || [] }))
+      .filter(g => g.brands.length > 0)
+    return groups
+  }, [selectedSlugs])
+  const brandDisabled = selectedSlugs.length === 0
   const [sort, setSort] = useState<'latest' | 'price-asc' | 'price-desc'>('latest')
   const [query, setQuery] = useState('')
   const [brand, setBrand] = useState('')
   const [minPrice, setMinPrice] = useState('')
   const [maxPrice, setMaxPrice] = useState('')
   const [specs, setSpecs] = useState('')
+
+  useEffect(() => {
+    const allowed = selectedBrandGroups.flatMap(g => g.brands)
+    if (brand && !allowed.includes(brand)) setBrand('')
+  }, [brand, selectedBrandGroups])
 
   useEffect(() => {
     fetch('/api/categories').then(r=>r.ok?r.json():[]).then(setCategories).catch(()=>{})
@@ -71,7 +83,7 @@ export default function CatalogPage() {
   useEffect(() => {
     setLoading(true)
     const url = new URL('/api/products', window.location.origin)
-    if (selectedSlug) url.searchParams.set('category', selectedSlug)
+    if (selectedSlugs.length > 0) url.searchParams.set('category', selectedSlugs.join(','))
     if (query.trim()) url.searchParams.set('q', query.trim())
     if (brand) url.searchParams.set('brand', brand)
     if (specs.trim()) url.searchParams.set('specs', specs.trim())
@@ -82,7 +94,7 @@ export default function CatalogPage() {
       .then((data: ApiProduct[]) => setProducts(data))
       .catch(() => setProducts([]))
       .finally(() => setLoading(false))
-  }, [selectedSlug, query, brand, minPrice, maxPrice, specs])
+  }, [selectedSlugs, query, brand, minPrice, maxPrice, specs])
 
   const prettyCount = products.length
   const sortedProducts = useMemo(() => {
@@ -100,9 +112,9 @@ export default function CatalogPage() {
         <Link to="/" className="hover:underline">Home</Link>
         <span className="mx-2">›</span>
         <span>Catalog</span>
-        {selectedSlug && (<>
+        {selectedSlugs.length > 0 && (<>
           <span className="mx-2">›</span>
-          <span className="capitalize">{selectedSlug.replace(/-/g, ' ')}</span>
+          <span className="capitalize">{selectedSlugs.join(', ').replace(/-/g, ' ')}</span>
         </>)}
       </div>
 
@@ -127,20 +139,39 @@ export default function CatalogPage() {
             </div>
             <div className="space-y-1.5 text-sm">
               {categories.map(c => {
-                const active = selectedSlug === c.slug
+                const active = selectedSlugs.includes(c.slug)
                 return (
-                  <Link
+                  <button
                     key={c.id}
-                    to={`/catalog?category=${encodeURIComponent(c.slug)}`}
+                    type="button"
+                    onClick={() => {
+                      const next = active
+                        ? selectedSlugs.filter(s => s !== c.slug)
+                        : [...selectedSlugs, c.slug]
+                      const params = new URLSearchParams(q)
+                      if (next.length > 0) params.set('category', next.join(','))
+                      else params.delete('category')
+                      nav({ search: params.toString() })
+                    }}
                     className={`flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 ${active? 'text-black font-medium':'text-gray-700'}`}
                   >
                     <span className={`inline-block h-4 w-4 rounded border ${active? 'bg-black border-black':'bg-white border-gray-300'}`} />
                     <span>{c.name}</span>
-                  </Link>
+                  </button>
                 )
               })}
-              {selectedSlug && (
-                <Link to="/catalog" className="inline-block mt-2 text-xs text-gray-500 hover:underline">Clear filter</Link>
+              {selectedSlugs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams(q)
+                    params.delete('category')
+                    nav({ search: params.toString() })
+                  }}
+                  className="inline-block mt-2 text-xs text-gray-500 hover:underline"
+                >
+                  Clear filter
+                </button>
               )}
             </div>
           </div>
@@ -171,9 +202,19 @@ export default function CatalogPage() {
             <div className="font-medium">Brand</div>
             <select value={brand} onChange={(e) => setBrand(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm" disabled={brandDisabled}>
               <option value="">{brandDisabled ? 'Select a category first' : 'All brands'}</option>
-              {filteredBrands.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
+              {brandDisabled ? (
+                allBrands.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))
+              ) : (
+                selectedBrandGroups.map(group => (
+                  <optgroup key={group.slug} label={(categories.find(c => c.slug === group.slug)?.name) || group.slug}>
+                    {group.brands.map(b => (
+                      <option key={`${group.slug}-${b}`} value={b}>{b}</option>
+                    ))}
+                  </optgroup>
+                ))
+              )}
             </select>
           </div>
           <hr className="my-6 border-gray-200" />

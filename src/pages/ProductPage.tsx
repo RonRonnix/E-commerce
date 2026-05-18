@@ -131,7 +131,7 @@ export default function ProductPage() {
     })
     if (r.ok) {
       // refresh cart count from server to avoid double-counting
-      refresh()
+      await refresh()
       // toast
       show('Added to your cart — view cart', { clickable: true, onClick: () => navigate('/cart') })
       // fly-to-cart animation (clone image and move toward navbar cart icon area)
@@ -173,10 +173,10 @@ export default function ProductPage() {
     try {
       if (isWished) {
         const r = await fetch(`/api/wishlist/${product.id}`, { method: 'DELETE', credentials: 'include' })
-        if (r.ok) { setIsWished(false); refreshWishlist(); show('Removed from wishlist') }
+        if (r.ok) { setIsWished(false); await refreshWishlist(); show('Removed from wishlist') }
       } else {
         const r = await fetch('/api/wishlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ productId: product.id }) })
-        if (r.ok) { setIsWished(true); refreshWishlist(); show('Added to wishlist') }
+        if (r.ok) { setIsWished(true); await refreshWishlist(); show('Added to wishlist') }
       }
     } finally { setWishLoading(false) }
   }

@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../components/AuthContext'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useToaster } from '../components/Toaster'
+import { useCart } from '../components/CartContext'
 
 export default function CheckoutPage() {
   const { user } = useAuth()
   const nav = useNavigate()
   const { show } = useToaster()
+  const { refresh: refreshCart } = useCart()
   const [items, setItems] = useState<Array<{ product: any, quantity: number }>>([])
   const [voucherCode, setVoucherCode] = useState('')
   const [summary, setSummary] = useState<{ subtotalCents: number; shippingCents: number; discountCents: number; totalCents: number } | null>(null)
@@ -40,6 +42,7 @@ export default function CheckoutPage() {
     const r = await fetch('/api/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ voucherCode: voucherCode || undefined, paymentMethod, address }) })
     if (!r.ok) { show('Checkout failed'); return }
     const data = await r.json()
+    await refreshCart()
     if (paymentMethod === 'online' && data.paymentId) {
       nav(`/payment/${data.paymentId}`)
     } else {
