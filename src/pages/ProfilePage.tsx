@@ -15,6 +15,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [editing, setEditing] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   // Orders state
   const [orders, setOrders] = useState<Array<any>>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
@@ -85,8 +86,62 @@ export default function ProfilePage() {
   if (user) {
     return (
       <div className="container-xl py-10 max-w-5xl">
-        <h1 className="text-2xl font-semibold">Your Profile</h1>
-        <p className="text-sm text-gray-600 mt-1">Only your public username and profile image are shown here.</p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Your Profile</h1>
+            <p className="text-sm text-gray-600 mt-1">Only your public username and profile image are shown here.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSettings(s => !s)}
+            className="p-2 rounded-md border hover:bg-gray-50 transition-colors"
+            aria-label="Account settings"
+            title="Account settings"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+              <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"/>
+              <path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.54V21a2 2 0 11-4 0v-.08a1.7 1.7 0 00-1-1.54 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.54-1H3a2 2 0 110-4h.08a1.7 1.7 0 001.54-1 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34h0A1.7 1.7 0 009 3.08V3a2 2 0 114 0v.08a1.7 1.7 0 001 1.54h0a1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87v0A1.7 1.7 0 0021 11.92H21a2 2 0 110 4h-.08a1.7 1.7 0 00-1.54 1z"/>
+            </svg>
+          </button>
+        </div>
+
+        {showSettings && (
+          <div className="mt-6 rounded-xl border bg-white p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Account Settings</h2>
+                <p className="text-sm text-gray-600">Manage your account preferences and saved details.</p>
+              </div>
+              <button type="button" className="text-sm text-gray-600 hover:underline" onClick={() => setShowSettings(false)}>Close</button>
+            </div>
+            <div className="mt-4 grid sm:grid-cols-2 gap-3">
+              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+                <div className="font-medium">Account Details</div>
+                <div className="text-xs text-gray-600">Profile info, email, password</div>
+              </button>
+              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+                <div className="font-medium">Saved Addresses</div>
+                <div className="text-xs text-gray-600">Shipping and billing addresses</div>
+              </button>
+              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+                <div className="font-medium">Bank Accounts / Cards</div>
+                <div className="text-xs text-gray-600">Payment methods and billing</div>
+              </button>
+              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+                <div className="font-medium">Notification Settings</div>
+                <div className="text-xs text-gray-600">Order and marketing alerts</div>
+              </button>
+              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+                <div className="font-medium">Privacy Settings</div>
+                <div className="text-xs text-gray-600">Profile visibility and data</div>
+              </button>
+              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+                <div className="font-medium">Security</div>
+                <div className="text-xs text-gray-600">Two-factor and login activity</div>
+              </button>
+            </div>
+          </div>
+        )}
 
         {!editing ? (
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-6 items-center">
