@@ -29,6 +29,7 @@ export default function CheckoutPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [pendingAction, setPendingAction] = useState<any | null>(null)
   const [pendingDelete, setPendingDelete] = useState<any | null>(null)
+  const [lastNoChangeToastAt, setLastNoChangeToastAt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -44,7 +45,7 @@ export default function CheckoutPage() {
         const defaultAddress = addressData.find((a: any) => a.isDefault) || addressData[0]
         if (defaultAddress) {
           setSelectedAddressId(defaultAddress.id)
-          setAddress({
+          const next = {
             fullName: defaultAddress.fullName,
             phone: defaultAddress.phone,
             addressLine1: defaultAddress.addressLine1,
@@ -53,9 +54,14 @@ export default function CheckoutPage() {
             region: defaultAddress.region,
             postalCode: defaultAddress.postalCode,
             country: defaultAddress.country || 'PH',
-          })
+          }
+          setAddress(next)
+          setAddressBaseline(next)
           setShowNewAddress(false)
         } else {
+          const blank = { fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' }
+          setAddress(blank)
+          setAddressBaseline(blank)
           setShowNewAddress(true)
         }
       })
@@ -78,7 +84,8 @@ export default function CheckoutPage() {
   const canSaveAddress = Boolean(
     address.fullName && address.phone && address.addressLine1 && address.city && address.region && address.postalCode
   )
-  const isDirty = showNewAddress && JSON.stringify(address) !== JSON.stringify(addressBaseline)
+  const addressKeys = ['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'region', 'postalCode', 'country'] as const
+  const isDirty = showNewAddress && addressKeys.some((k) => (address[k] ?? '') !== (addressBaseline[k] ?? ''))
 
   useEffect(() => {
     if (!isDirty) return
@@ -177,6 +184,14 @@ export default function CheckoutPage() {
 
   function requestSave() {
     if (!canSaveAddress || savingAddress) return
+    if (!isDirty) {
+      const now = Date.now()
+      if (now - lastNoChangeToastAt > 1500) {
+        show('No changes to save')
+        setLastNoChangeToastAt(now)
+      }
+      return
+    }
     setSaveConfirmOpen(true)
   }
 
@@ -235,6 +250,9 @@ export default function CheckoutPage() {
     setAddresses((prev) => prev.filter((a) => a.id !== item.id))
     if (selectedAddressId === item.id) {
       setSelectedAddressId(null)
+      const blank = { fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' }
+      setAddress(blank)
+      setAddressBaseline(blank)
       setShowNewAddress(true)
     }
     if (editingAddressId === item.id) {
@@ -303,8 +321,8 @@ export default function CheckoutPage() {
                     {a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}, {a.city}, {a.region}, {a.postalCode}
                   </div>
                   <div className="mt-2 flex items-center gap-3 text-xs">
-                    <button type="button" className="underline cursor-pointer" onClick={(e) => { e.stopPropagation(); requestAction({ type: 'edit', item: a }) }}>Edit</button>
-                    <button type="button" className="underline cursor-pointer text-red-600 disabled:opacity-60" disabled={deletingAddressId === a.id} onClick={(e) => { e.stopPropagation(); requestDelete(a) }}>Delete</button>
+                    <button type="button" className="underline cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" onClick={(e) => { e.stopPropagation(); requestAction({ type: 'edit', item: a }) }}>Edit</button>
+                    <button type="button" className="underline cursor-pointer text-red-600 disabled:opacity-60 transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" disabled={deletingAddressId === a.id} onClick={(e) => { e.stopPropagation(); requestDelete(a) }}>Delete</button>
                   </div>
                 </div>
               ))}
@@ -323,13 +341,13 @@ export default function CheckoutPage() {
               <input className="border rounded-md px-3 py-2" placeholder="Country" value={address.country} onChange={e=>setAddress({...address, country: e.target.value})} />
               <div className="sm:col-span-2 flex items-center gap-3">
                 <button
-                  className="px-3 py-2 rounded-md bg-black text-white text-xs disabled:opacity-60"
+                  className="px-3 py-2 rounded-md bg-black text-white text-xs disabled:opacity-60 transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 cursor-pointer" 
                   disabled={!canSaveAddress || savingAddress}
                   onClick={requestSave}
                 >
                   {editingAddressId ? 'Save changes' : 'Save address'}
                 </button>
-                <button className="text-xs underline" onClick={() => requestAction({ type: 'cancel' })}>Cancel</button>
+                <button className="text-xs underline transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 cursor-pointer" onClick={() => requestAction({ type: 'cancel' })}>Cancel</button>
               </div>
             </div>
           )}

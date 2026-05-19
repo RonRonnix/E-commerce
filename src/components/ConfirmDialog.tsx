@@ -35,8 +35,8 @@ export function ConfirmDialog({
         <div className="text-lg font-medium">{title}</div>
         {message && <div className="mt-1 text-sm text-gray-600">{message}</div>}
         <div className="mt-4 flex justify-end gap-3">
-          <button className="px-3 py-1.5 rounded-md border transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={onCancel}>{cancelText}</button>
-          <button className="px-3 py-1.5 rounded-md bg-black text-white transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={onConfirm}>{confirmText}</button>
+          <button className="px-3 py-1.5 rounded-md border transition-transform duration-150 hover:scale-[1.03] active:scale-95 cursor-pointer" onClick={onCancel}>{cancelText}</button>
+          <button className="px-3 py-1.5 rounded-md bg-black text-white transition-transform duration-150 hover:scale-[1.03] active:scale-95 cursor-pointer" onClick={onConfirm}>{confirmText}</button>
         </div>
       </div>
     </div>
