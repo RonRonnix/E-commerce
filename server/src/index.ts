@@ -248,6 +248,78 @@ app.get('/api/brands', async (_req: Request, res: Response) => {
   res.json(brands)
 })
 
+// Address book (per-user)
+app.get('/api/addresses', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const uid = (req as any).user.id as string
+  const items = await (prisma as any).address.findMany({
+    where: { userId: uid },
+    orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+  })
+  res.json(items)
+}))
+
+app.post('/api/addresses', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const uid = (req as any).user.id as string
+  const schema = z.object({
+    label: z.string().trim().max(60).optional(),
+    fullName: z.string().min(2),
+    phone: z.string().min(5),
+    addressLine1: z.string().min(3),
+    addressLine2: z.string().optional(),
+    city: z.string().min(2),
+    region: z.string().min(2),
+    postalCode: z.string().min(3),
+    country: z.string().min(2).default('PH'),
+    isDefault: z.boolean().optional(),
+  })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+  const data = parsed.data
+
+  if (data.isDefault) {
+    await (prisma as any).address.updateMany({ where: { userId: uid }, data: { isDefault: false } })
+  }
+
+  const created = await (prisma as any).address.create({ data: { ...data, userId: uid } })
+  res.status(201).json(created)
+}))
+
+app.patch('/api/addresses/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const uid = (req as any).user.id as string
+  const schema = z.object({
+    label: z.string().trim().max(60).optional(),
+    fullName: z.string().min(2).optional(),
+    phone: z.string().min(5).optional(),
+    addressLine1: z.string().min(3).optional(),
+    addressLine2: z.string().optional(),
+    city: z.string().min(2).optional(),
+    region: z.string().min(2).optional(),
+    postalCode: z.string().min(3).optional(),
+    country: z.string().min(2).optional(),
+    isDefault: z.boolean().optional(),
+  })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
+  const existing = await (prisma as any).address.findUnique({ where: { id: req.params.id } })
+  if (!existing || existing.userId !== uid) return res.status(404).json({ error: 'Address not found' })
+
+  if (parsed.data.isDefault) {
+    await (prisma as any).address.updateMany({ where: { userId: uid }, data: { isDefault: false } })
+  }
+
+  const updated = await (prisma as any).address.update({ where: { id: req.params.id }, data: parsed.data })
+  res.json(updated)
+}))
+
+app.delete('/api/addresses/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const uid = (req as any).user.id as string
+  const existing = await (prisma as any).address.findUnique({ where: { id: req.params.id } })
+  if (!existing || existing.userId !== uid) return res.status(404).json({ error: 'Address not found' })
+  await (prisma as any).address.delete({ where: { id: req.params.id } })
+  res.json({ ok: true })
+}))
+
 // Cart endpoints (per-user)
 app.get('/api/cart', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const uid = (req as any).user.id as string

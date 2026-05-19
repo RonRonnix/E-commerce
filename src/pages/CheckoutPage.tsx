@@ -11,6 +11,10 @@ export default function CheckoutPage() {
   const { show } = useToaster()
   const { refresh: refreshCart } = useCart()
   const [items, setItems] = useState<Array<{ product: any, quantity: number }>>([])
+  const [addresses, setAddresses] = useState<any[]>([])
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
+  const [showNewAddress, setShowNewAddress] = useState(false)
+  const [saveAddress, setSaveAddress] = useState(true)
   const [voucherCode, setVoucherCode] = useState('')
   const [summary, setSummary] = useState<{ subtotalCents: number; shippingCents: number; discountCents: number; totalCents: number } | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'cod'|'online'>('cod')
@@ -21,9 +25,32 @@ export default function CheckoutPage() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch('/api/cart', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : [])
-      .then((data) => { if (!cancelled) setItems(data) })
+    Promise.all([
+      fetch('/api/cart', { credentials: 'include' }).then(r => r.ok ? r.json() : []),
+      fetch('/api/addresses', { credentials: 'include' }).then(r => r.ok ? r.json() : []),
+    ])
+      .then(([cartData, addressData]) => {
+        if (cancelled) return
+        setItems(cartData)
+        setAddresses(addressData)
+        const defaultAddress = addressData.find((a: any) => a.isDefault) || addressData[0]
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id)
+          setAddress({
+            fullName: defaultAddress.fullName,
+            phone: defaultAddress.phone,
+            addressLine1: defaultAddress.addressLine1,
+            addressLine2: defaultAddress.addressLine2 || '',
+            city: defaultAddress.city,
+            region: defaultAddress.region,
+            postalCode: defaultAddress.postalCode,
+            country: defaultAddress.country || 'PH',
+          })
+          setShowNewAddress(false)
+        } else {
+          setShowNewAddress(true)
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
@@ -36,9 +63,41 @@ export default function CheckoutPage() {
   }, [voucherCode])
 
   const price = (cents: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format((cents || 0)/100)
+  const addressReady = Boolean(
+    selectedAddressId ||
+    (address.fullName && address.phone && address.addressLine1 && address.city && address.region && address.postalCode)
+  )
+
+  function pickAddress(item: any) {
+    setSelectedAddressId(item.id)
+    setAddress({
+      fullName: item.fullName,
+      phone: item.phone,
+      addressLine1: item.addressLine1,
+      addressLine2: item.addressLine2 || '',
+      city: item.city,
+      region: item.region,
+      postalCode: item.postalCode,
+      country: item.country || 'PH',
+    })
+    setShowNewAddress(false)
+  }
 
   async function placeOrder() {
     if (!user) { nav('/profile'); return }
+    if (showNewAddress && saveAddress) {
+      const r = await fetch('/api/addresses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ...address, isDefault: addresses.length === 0 }),
+      })
+      if (r.ok) {
+        const created = await r.json()
+        setAddresses((prev) => [created, ...prev])
+        setSelectedAddressId(created.id)
+      }
+    }
     const r = await fetch('/api/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ voucherCode: voucherCode || undefined, paymentMethod, address }) })
     if (!r.ok) { show('Checkout failed'); return }
     const data = await r.json()
@@ -52,7 +111,7 @@ export default function CheckoutPage() {
 
   function attemptCheckout() {
     // minimal address checks before showing confirm
-    if (!address.fullName || !address.phone || !address.addressLine1 || !address.city || !address.region || !address.postalCode) {
+    if (!addressReady) {
       show('Please fill in all required address fields')
       return
     }
@@ -70,25 +129,65 @@ export default function CheckoutPage() {
     <section className="container-xl py-10 grid md:grid-cols-3 gap-8">
       <div className="md:col-span-2 space-y-6">
         <div className="rounded-xl border bg-white p-4">
-          <h2 className="font-semibold mb-3">Shipping Address</h2>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <input className="border rounded-md px-3 py-2" placeholder="Full name" value={address.fullName} onChange={e=>setAddress({...address, fullName: e.target.value})} />
-            <input className="border rounded-md px-3 py-2" placeholder="Phone" value={address.phone} onChange={e=>setAddress({...address, phone: e.target.value})} />
-            <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 1" value={address.addressLine1} onChange={e=>setAddress({...address, addressLine1: e.target.value})} />
-            <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 2 (optional)" value={address.addressLine2} onChange={e=>setAddress({...address, addressLine2: e.target.value})} />
-            <input className="border rounded-md px-3 py-2" placeholder="City" value={address.city} onChange={e=>setAddress({...address, city: e.target.value})} />
-            <input className="border rounded-md px-3 py-2" placeholder="Region/Province" value={address.region} onChange={e=>setAddress({...address, region: e.target.value})} />
-            <input className="border rounded-md px-3 py-2" placeholder="Postal code" value={address.postalCode} onChange={e=>setAddress({...address, postalCode: e.target.value})} />
-            <input className="border rounded-md px-3 py-2" placeholder="Country" value={address.country} onChange={e=>setAddress({...address, country: e.target.value})} />
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold">Shipping Address</h2>
+            <button
+              className="text-sm underline cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
+              onClick={() => { setShowNewAddress(true); setSelectedAddressId(null) }}
+            >
+              Add new address
+            </button>
           </div>
+
+          {addresses.length > 0 && (
+            <div className="grid sm:grid-cols-2 gap-3 mb-4">
+              {addresses.map((a: any) => (
+                <button
+                  key={a.id}
+                  className={`text-left border rounded-md p-3 cursor-pointer transition ${selectedAddressId === a.id ? 'border-black bg-gray-50' : 'hover:border-gray-400'}`}
+                  onClick={() => pickAddress(a)}
+                >
+                  <div className="font-medium text-sm">{a.label || a.fullName}</div>
+                  <div className="text-xs text-gray-500">{a.phone}</div>
+                  <div className="text-xs text-gray-500 line-clamp-2">
+                    {a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}, {a.city}, {a.region}, {a.postalCode}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {showNewAddress && (
+            <div className="grid sm:grid-cols-2 gap-3">
+              <input className="border rounded-md px-3 py-2" placeholder="Full name" value={address.fullName} onChange={e=>setAddress({...address, fullName: e.target.value})} />
+              <input className="border rounded-md px-3 py-2" placeholder="Phone" value={address.phone} onChange={e=>setAddress({...address, phone: e.target.value})} />
+              <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 1" value={address.addressLine1} onChange={e=>setAddress({...address, addressLine1: e.target.value})} />
+              <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 2 (optional)" value={address.addressLine2} onChange={e=>setAddress({...address, addressLine2: e.target.value})} />
+              <input className="border rounded-md px-3 py-2" placeholder="City" value={address.city} onChange={e=>setAddress({...address, city: e.target.value})} />
+              <input className="border rounded-md px-3 py-2" placeholder="Region/Province" value={address.region} onChange={e=>setAddress({...address, region: e.target.value})} />
+              <input className="border rounded-md px-3 py-2" placeholder="Postal code" value={address.postalCode} onChange={e=>setAddress({...address, postalCode: e.target.value})} />
+              <input className="border rounded-md px-3 py-2" placeholder="Country" value={address.country} onChange={e=>setAddress({...address, country: e.target.value})} />
+              <label className="flex items-center gap-2 text-xs sm:col-span-2">
+                <input type="checkbox" checked={saveAddress} onChange={e => setSaveAddress(e.target.checked)} />
+                Save this address to my list
+              </label>
+            </div>
+          )}
+
+          {!showNewAddress && !selectedAddressId && (
+            <div className="text-sm text-gray-500">Select an address or add a new one to continue.</div>
+          )}
         </div>
 
-        <div className="rounded-xl border bg-white p-4">
+        <div className={`rounded-xl border bg-white p-4 ${addressReady ? '' : 'opacity-60'}`}>
           <h2 className="font-semibold mb-3">Payment</h2>
           <div className="flex items-center gap-6">
-            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={paymentMethod==='cod'} onChange={()=>setPaymentMethod('cod')} /> Cash on Delivery</label>
-            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={paymentMethod==='online'} onChange={()=>setPaymentMethod('online')} /> Online Payment</label>
+            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={paymentMethod==='cod'} onChange={()=>setPaymentMethod('cod')} disabled={!addressReady} /> Cash on Delivery</label>
+            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={paymentMethod==='online'} onChange={()=>setPaymentMethod('online')} disabled={!addressReady} /> Online Payment</label>
           </div>
+          {!addressReady && (
+            <div className="text-xs text-gray-500 mt-2">Choose a shipping address first.</div>
+          )}
         </div>
       </div>
 

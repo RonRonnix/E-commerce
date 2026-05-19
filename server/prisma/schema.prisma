@@ -61,6 +61,7 @@ model User {
   wishlistItems WishlistItem[]
   orders       Order[]
   reviews      Review[]
+  addresses    Address[]
 }
 
 model Role {
@@ -102,6 +103,27 @@ model WishlistItem {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
+}
+
+model Address {
+  id           String   @id @default(cuid())
+  userId       String
+  label        String?
+  fullName     String
+  phone        String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  region       String
+  postalCode   String
+  country      String   @default("PH")
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isDefault])
 }
 
 model Order {
