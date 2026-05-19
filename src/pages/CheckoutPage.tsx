@@ -21,8 +21,14 @@ export default function CheckoutPage() {
   const [summary, setSummary] = useState<{ subtotalCents: number; shippingCents: number; discountCents: number; totalCents: number } | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'cod'|'online'>('cod')
   const [address, setAddress] = useState({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' })
+  const [addressBaseline, setAddressBaseline] = useState({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' })
   const [loading, setLoading] = useState(true)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const [saveConfirmOpen, setSaveConfirmOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [pendingAction, setPendingAction] = useState<any | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<any | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -72,11 +78,32 @@ export default function CheckoutPage() {
   const canSaveAddress = Boolean(
     address.fullName && address.phone && address.addressLine1 && address.city && address.region && address.postalCode
   )
+  const isDirty = showNewAddress && JSON.stringify(address) !== JSON.stringify(addressBaseline)
+
+  useEffect(() => {
+    if (!isDirty) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [isDirty])
 
   function pickAddress(item: any) {
     setSelectedAddressId(item.id)
     setEditingAddressId(null)
     setAddress({
+      fullName: item.fullName,
+      phone: item.phone,
+      addressLine1: item.addressLine1,
+      addressLine2: item.addressLine2 || '',
+      city: item.city,
+      region: item.region,
+      postalCode: item.postalCode,
+      country: item.country || 'PH',
+    })
+    setAddressBaseline({
       fullName: item.fullName,
       phone: item.phone,
       addressLine1: item.addressLine1,
@@ -92,7 +119,9 @@ export default function CheckoutPage() {
   function startNewAddress() {
     setSelectedAddressId(null)
     setEditingAddressId(null)
-    setAddress({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' })
+    const blank = { fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' }
+    setAddress(blank)
+    setAddressBaseline(blank)
     setShowNewAddress(true)
   }
 
@@ -109,7 +138,51 @@ export default function CheckoutPage() {
       postalCode: item.postalCode,
       country: item.country || 'PH',
     })
+    setAddressBaseline({
+      fullName: item.fullName,
+      phone: item.phone,
+      addressLine1: item.addressLine1,
+      addressLine2: item.addressLine2 || '',
+      city: item.city,
+      region: item.region,
+      postalCode: item.postalCode,
+      country: item.country || 'PH',
+    })
     setShowNewAddress(true)
+  }
+
+  function runPending(action: any) {
+    if (!action) return
+    if (action.type === 'pick') pickAddress(action.item)
+    if (action.type === 'new') startNewAddress()
+    if (action.type === 'edit') startEditAddress(action.item)
+    if (action.type === 'cancel') {
+      if (editingAddressId) {
+        const existing = addresses.find((a) => a.id === editingAddressId)
+        if (existing) pickAddress(existing)
+      }
+      setEditingAddressId(null)
+      setShowNewAddress(false)
+    }
+  }
+
+  function requestAction(action: any) {
+    if (!isDirty) {
+      runPending(action)
+      return
+    }
+    setPendingAction(action)
+    setDiscardOpen(true)
+  }
+
+  function requestSave() {
+    if (!canSaveAddress || savingAddress) return
+    setSaveConfirmOpen(true)
+  }
+
+  function requestDelete(item: any) {
+    setPendingDelete(item)
+    setDeleteConfirmOpen(true)
   }
 
   async function saveAddressNow() {
@@ -137,6 +210,16 @@ export default function CheckoutPage() {
     setSelectedAddressId(saved.id)
     setEditingAddressId(null)
     setShowNewAddress(false)
+    setAddressBaseline({
+      fullName: saved.fullName,
+      phone: saved.phone,
+      addressLine1: saved.addressLine1,
+      addressLine2: saved.addressLine2 || '',
+      city: saved.city,
+      region: saved.region,
+      postalCode: saved.postalCode,
+      country: saved.country || 'PH',
+    })
     setSavingAddress(false)
   }
 
@@ -197,7 +280,7 @@ export default function CheckoutPage() {
             <h2 className="font-semibold">Shipping Address</h2>
             <button
               className="text-sm underline cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
-              onClick={startNewAddress}
+              onClick={() => requestAction({ type: 'new' })}
             >
               Add new address
             </button>
@@ -211,8 +294,8 @@ export default function CheckoutPage() {
                   className={`text-left border rounded-md p-3 transition cursor-pointer ${selectedAddressId === a.id ? 'border-black bg-gray-50' : 'hover:border-gray-400'}`}
                   role="button"
                   tabIndex={0}
-                  onClick={() => pickAddress(a)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') pickAddress(a) }}
+                  onClick={() => requestAction({ type: 'pick', item: a })}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') requestAction({ type: 'pick', item: a }) }}
                 >
                   <div className="font-medium text-sm">{a.label || a.fullName}</div>
                   <div className="text-xs text-gray-500">{a.phone}</div>
@@ -220,8 +303,8 @@ export default function CheckoutPage() {
                     {a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}, {a.city}, {a.region}, {a.postalCode}
                   </div>
                   <div className="mt-2 flex items-center gap-3 text-xs">
-                    <button type="button" className="underline" onClick={(e) => { e.stopPropagation(); startEditAddress(a) }}>Edit</button>
-                    <button type="button" className="underline text-red-600 disabled:opacity-60" disabled={deletingAddressId === a.id} onClick={(e) => { e.stopPropagation(); deleteAddress(a) }}>Delete</button>
+                    <button type="button" className="underline cursor-pointer" onClick={(e) => { e.stopPropagation(); requestAction({ type: 'edit', item: a }) }}>Edit</button>
+                    <button type="button" className="underline cursor-pointer text-red-600 disabled:opacity-60" disabled={deletingAddressId === a.id} onClick={(e) => { e.stopPropagation(); requestDelete(a) }}>Delete</button>
                   </div>
                 </div>
               ))}
@@ -242,13 +325,11 @@ export default function CheckoutPage() {
                 <button
                   className="px-3 py-2 rounded-md bg-black text-white text-xs disabled:opacity-60"
                   disabled={!canSaveAddress || savingAddress}
-                  onClick={saveAddressNow}
+                  onClick={requestSave}
                 >
                   {editingAddressId ? 'Save changes' : 'Save address'}
                 </button>
-                {editingAddressId && (
-                  <button className="text-xs underline" onClick={() => { setEditingAddressId(null); setShowNewAddress(false) }}>Cancel</button>
-                )}
+                <button className="text-xs underline" onClick={() => requestAction({ type: 'cancel' })}>Cancel</button>
               </div>
             </div>
           )}
@@ -314,6 +395,33 @@ Total: PHP ${(summary.totalCents/100).toLocaleString('en-PH', { maximumFractionD
       cancelText="Review"
       onConfirm={() => { setConfirmOpen(false); placeOrder() }}
       onCancel={() => setConfirmOpen(false)}
+    />
+    <ConfirmDialog
+      open={discardOpen}
+      title="Discard changes?"
+      message="You have unsaved address changes. Discard them and continue?"
+      confirmText="Discard"
+      cancelText="Keep editing"
+      onConfirm={() => { setDiscardOpen(false); runPending(pendingAction); setPendingAction(null) }}
+      onCancel={() => { setDiscardOpen(false); setPendingAction(null) }}
+    />
+    <ConfirmDialog
+      open={saveConfirmOpen}
+      title={editingAddressId ? 'Save changes?' : 'Save address?'}
+      message={editingAddressId ? 'Save your updated address details?' : 'Save this address to your list?'}
+      confirmText="Save"
+      cancelText="Keep editing"
+      onConfirm={() => { setSaveConfirmOpen(false); saveAddressNow() }}
+      onCancel={() => setSaveConfirmOpen(false)}
+    />
+    <ConfirmDialog
+      open={deleteConfirmOpen}
+      title="Delete address?"
+      message="This will remove the address from your list."
+      confirmText="Delete"
+      cancelText="Cancel"
+      onConfirm={() => { setDeleteConfirmOpen(false); if (pendingDelete) deleteAddress(pendingDelete); setPendingDelete(null) }}
+      onCancel={() => { setDeleteConfirmOpen(false); setPendingDelete(null) }}
     />
     </>
   )
