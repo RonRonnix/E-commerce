@@ -28,6 +28,8 @@ export default function ProfilePage() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [showAuthPassword, setShowAuthPassword] = useState(false)
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   // Orders state
   const [orders, setOrders] = useState<Array<any>>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
@@ -137,7 +139,8 @@ export default function ProfilePage() {
           <button
             type="button"
             onClick={() => setShowSettings(s => !s)}
-            className="p-2 rounded-md border hover:bg-gray-50 transition-colors"
+            disabled={editing}
+            className="p-2 rounded-md border hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Account settings"
             title="Account settings"
           >
@@ -280,6 +283,51 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {confirmSaveOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+              <h3 className="text-lg font-semibold mb-2">Save changes?</h3>
+              <p className="text-sm text-gray-600 mb-4">Do you want to save your profile updates?</p>
+              <div className="flex justify-end gap-2">
+                <button type="button" className="px-3 py-2 rounded-md border disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" onClick={() => setConfirmSaveOpen(false)} disabled={saving}>Cancel</button>
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-md bg-black text-white disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
+                  disabled={saving}
+                  onClick={async () => {
+                    setConfirmSaveOpen(false)
+                    await onSaveProfile({ preventDefault: () => {} } as React.FormEvent)
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {confirmCancelOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+              <h3 className="text-lg font-semibold mb-2">Discard changes?</h3>
+              <p className="text-sm text-gray-600 mb-4">Your unsaved edits will be lost.</p>
+              <div className="flex justify-end gap-2">
+                <button type="button" className="px-3 py-2 rounded-md border disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" onClick={() => setConfirmCancelOpen(false)}>Keep editing</button>
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-md bg-black text-white disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
+                  onClick={() => {
+                    setConfirmCancelOpen(false)
+                    resetEdits()
+                  }}
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {!editing ? (
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-6 items-center">
             <div className="flex flex-col items-center gap-3">
@@ -303,7 +351,7 @@ export default function ProfilePage() {
             </div>
           </div>
         ) : (
-          <form onSubmit={onSaveProfile} className="mt-6 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-6 items-start">
+          <form onSubmit={(e) => { e.preventDefault(); setConfirmSaveOpen(true) }} className="mt-6 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-6 items-start">
             <div className="flex flex-col items-center gap-3">
               <div className="h-28 w-28 rounded-full overflow-hidden bg-gray-100 border">
                 {avatarPreview ? (
@@ -340,13 +388,7 @@ export default function ProfilePage() {
                 <button disabled={saving} className="px-4 py-2 rounded-md bg-black text-white disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" type="submit">
                   {saving ? 'Saving…' : 'Save changes'}
                 </button>
-                <button type="button" className="px-4 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={() => {
-                  // reset local edits and exit edit mode
-                  setUsername(user.username || '')
-                  setAvatarPreview(null)
-                  if (fileInputRef.current) fileInputRef.current.value = ''
-                  setEditing(false)
-                }}>Cancel</button>
+                <button type="button" className="px-4 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={() => setConfirmCancelOpen(true)}>Cancel</button>
                 <button type="button" className="ml-auto px-4 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={() => logout()}>Log out</button>
               </div>
             </div>
@@ -389,6 +431,13 @@ export default function ProfilePage() {
         </div>
       </div>
     )
+  }
+
+  function resetEdits() {
+    setUsername(user?.username || '')
+    setAvatarPreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    setEditing(false)
   }
 
   return (
