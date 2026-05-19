@@ -5,6 +5,7 @@ type User = {
   id: string
   email: string
   fullName?: string
+  isVerified?: boolean
   username?: string
   avatarUrl?: string
   roles: string[]
@@ -17,6 +18,7 @@ type AuthCtx = {
   logout: () => Promise<void>
   updateProfile: (payload: { username?: string }) => Promise<User>
   updateAvatar: (file: File) => Promise<User>
+  updatePassword: (payload: { currentPassword: string; newPassword: string }) => Promise<void>
   refresh: () => Promise<void>
 }
 
@@ -84,7 +86,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return u
   }
 
-  return <Ctx.Provider value={{ user, loading, login, register, logout, updateProfile, updateAvatar, refresh }}>{children}</Ctx.Provider>
+  async function updatePassword(payload: { currentPassword: string; newPassword: string }) {
+    const r = await fetch('/api/users/me/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    })
+    if (!r.ok) throw new Error('Failed to update password')
+  }
+
+  return <Ctx.Provider value={{ user, loading, login, register, logout, updateProfile, updateAvatar, updatePassword, refresh }}>{children}</Ctx.Provider>
 }
 
 export function useAuth() {

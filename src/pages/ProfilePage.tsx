@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../components/AuthContext'
 
 export default function ProfilePage() {
-  const { user, loading, login, register, logout, updateProfile, updateAvatar } = useAuth()
+  const { user, loading, login, register, logout, updateProfile, updateAvatar, updatePassword } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -16,6 +16,18 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [editing, setEditing] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<'account' | 'addresses' | 'payments' | 'notifications' | 'privacy' | 'security' | null>(null)
+  const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = useState(false)
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [showAuthPassword, setShowAuthPassword] = useState(false)
   // Orders state
   const [orders, setOrders] = useState<Array<any>>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
@@ -83,6 +95,37 @@ export default function ProfilePage() {
     setAvatarPreview(url)
   }
 
+  async function onChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (!currentPassword || !newPassword) {
+      setPasswordError('Please fill in all password fields')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match')
+      return
+    }
+    try {
+      setPasswordSaving(true)
+      setPasswordError(null)
+      await updatePassword({ currentPassword, newPassword })
+      setPasswordSuccess(true)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setShowCurrentPassword(false)
+      setShowNewPassword(false)
+      setShowConfirmPassword(false)
+      setShowPasswordForm(false)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update password'
+      setPasswordError(msg)
+      setPasswordSuccess(false)
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
+
   if (user) {
     return (
       <div className="container-xl py-10 max-w-5xl">
@@ -115,31 +158,125 @@ export default function ProfilePage() {
               <button type="button" className="text-sm text-gray-600 hover:underline" onClick={() => setShowSettings(false)}>Close</button>
             </div>
             <div className="mt-4 grid sm:grid-cols-2 gap-3">
-              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+              <button type="button" onClick={() => setSettingsSection('account')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'account' ? 'border-black' : ''}`}>
                 <div className="font-medium">Account Details</div>
                 <div className="text-xs text-gray-600">Profile info, email, password</div>
               </button>
-              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+              <button type="button" onClick={() => setSettingsSection('addresses')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'addresses' ? 'border-black' : ''}`}>
                 <div className="font-medium">Saved Addresses</div>
                 <div className="text-xs text-gray-600">Shipping and billing addresses</div>
               </button>
-              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+              <button type="button" onClick={() => setSettingsSection('payments')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'payments' ? 'border-black' : ''}`}>
                 <div className="font-medium">Bank Accounts / Cards</div>
                 <div className="text-xs text-gray-600">Payment methods and billing</div>
               </button>
-              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+              <button type="button" onClick={() => setSettingsSection('notifications')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'notifications' ? 'border-black' : ''}`}>
                 <div className="font-medium">Notification Settings</div>
                 <div className="text-xs text-gray-600">Order and marketing alerts</div>
               </button>
-              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+              <button type="button" onClick={() => setSettingsSection('privacy')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'privacy' ? 'border-black' : ''}`}>
                 <div className="font-medium">Privacy Settings</div>
                 <div className="text-xs text-gray-600">Profile visibility and data</div>
               </button>
-              <button type="button" className="rounded-lg border p-3 text-left hover:bg-gray-50">
+              <button type="button" onClick={() => setSettingsSection('security')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'security' ? 'border-black' : ''}`}>
                 <div className="font-medium">Security</div>
                 <div className="text-xs text-gray-600">Two-factor and login activity</div>
               </button>
             </div>
+            {settingsSection === 'account' && (
+              <div className="mt-5 rounded-lg border p-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600 mb-3">Account Details</h3>
+                <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-gray-600">Email</div>
+                    <div className="font-medium break-all">{user.email}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-600">Full Name</div>
+                    <div className="font-medium">{user.fullName || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-600">Username</div>
+                    <div className="font-medium">{user.username || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-600">Email Status</div>
+                    <div className="font-medium">{user.isVerified ? 'Verified' : 'Not verified'}</div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <div className="text-gray-600">Password</div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium">••••••••</span>
+                      <button type="button" className="text-sm text-gray-600 hover:underline" onClick={() => { setShowPasswordForm(v => !v); setPasswordSuccess(false); setPasswordError(null) }}>
+                        {showPasswordForm ? 'Hide' : 'Change password'}
+                      </button>
+                    </div>
+                    {showPasswordForm && (
+                      <form onSubmit={onChangePassword} className="mt-3 grid gap-3">
+                        <div>
+                          <label className="text-xs text-gray-600">Current password</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type={showCurrentPassword ? 'text' : 'password'}
+                              value={currentPassword}
+                              onChange={e => setCurrentPassword(e.target.value)}
+                              className="w-full border rounded-md px-3 py-2 text-sm"
+                            />
+                            <button type="button" className="p-2 border rounded-md" onClick={() => setShowCurrentPassword(v => !v)} aria-label="Toggle password visibility">
+                              <Eye open={showCurrentPassword} />
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-600">New password</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type={showNewPassword ? 'text' : 'password'}
+                              value={newPassword}
+                              onChange={e => setNewPassword(e.target.value)}
+                              className="w-full border rounded-md px-3 py-2 text-sm"
+                            />
+                            <button type="button" className="p-2 border rounded-md" onClick={() => setShowNewPassword(v => !v)} aria-label="Toggle new password visibility">
+                              <Eye open={showNewPassword} />
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-600">Confirm new password</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type={showConfirmPassword ? 'text' : 'password'}
+                              value={confirmPassword}
+                              onChange={e => setConfirmPassword(e.target.value)}
+                              className="w-full border rounded-md px-3 py-2 text-sm"
+                            />
+                            <button type="button" className="p-2 border rounded-md" onClick={() => setShowConfirmPassword(v => !v)} aria-label="Toggle confirm password visibility">
+                              <Eye open={showConfirmPassword} />
+                            </button>
+                          </div>
+                        </div>
+                        {passwordError && <div className="text-sm text-red-600">{passwordError}</div>}
+                        {passwordSuccess && <div className="text-sm text-green-600">Password updated.</div>}
+                        <div className="flex gap-2">
+                          <button type="submit" disabled={passwordSaving} className="px-3 py-2 rounded-md bg-black text-white text-sm disabled:opacity-60">
+                            {passwordSaving ? 'Saving…' : 'Save password'}
+                          </button>
+                          <button type="button" className="px-3 py-2 rounded-md border text-sm" onClick={() => { setShowPasswordForm(false); setPasswordError(null) }}>Cancel</button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button type="button" className="px-3 py-2 rounded-md border text-sm" onClick={() => setEditing(true)}>Edit profile</button>
+                </div>
+              </div>
+            )}
+            {settingsSection && settingsSection !== 'account' && (
+              <div className="mt-5 rounded-lg border p-4 text-sm text-gray-600">
+                This section is coming soon.
+              </div>
+            )}
           </div>
         )}
 
@@ -265,10 +402,34 @@ export default function ProfilePage() {
           <input value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="Full name" className="w-full border rounded-md px-3 py-2" required />
         )}
         <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="Email" className="w-full border rounded-md px-3 py-2" required />
-        <input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="Password" className="w-full border rounded-md px-3 py-2" required />
+        <div className="flex items-center gap-2">
+          <input value={password} onChange={e=>setPassword(e.target.value)} type={showAuthPassword ? 'text' : 'password'} placeholder="Password" className="w-full border rounded-md px-3 py-2" required />
+          <button type="button" className="p-2 border rounded-md" onClick={() => setShowAuthPassword(v => !v)} aria-label="Toggle password visibility">
+            <Eye open={showAuthPassword} />
+          </button>
+        </div>
         {error && <div className="text-red-600 text-sm">{error}</div>}
         <button className="px-4 py-2 rounded-md bg-black text-white" type="submit">{mode==='login'?'Login':'Create account'}</button>
       </form>
     </div>
+  )
+}
+
+function Eye({ open }: { open: boolean }) {
+  if (open) {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    )
+  }
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M2 12s3.5-7 10-7c2.8 0 5.1 1.1 6.9 2.5" />
+      <path d="M22 12s-3.5 7-10 7c-2.8 0-5.1-1.1-6.9-2.5" />
+      <path d="M3 3l18 18" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
   )
 }

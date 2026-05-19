@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { requireAuth, requireRole } from './auth'
 import { z } from 'zod'
+import bcrypt from 'bcryptjs'
 
 const app = express()
 const WEB_ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173'
@@ -620,6 +621,7 @@ async function getUserDto(userId: string) {
     id: user.id,
     email: user.email,
     fullName: user.fullName || undefined,
+    isVerified: user.isVerified,
     username: (user as any).username || undefined,
     avatarUrl: (user as any).avatarUrl || undefined,
     roles: roles.map(r => r.role.name),
@@ -652,6 +654,28 @@ app.post('/api/users/me/avatar', requireAuth, upload.single('avatar'), asyncHand
   await prisma.user.update({ where: { id: uid }, data: { avatarUrl: url } as any })
   const dto = await getUserDto(uid)
   res.json(dto)
+}))
+
+// Profile: change password
+app.post('/api/users/me/password', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const schema = z.object({
+    currentPassword: z.string().min(6),
+    newPassword: z.string().min(6),
+  })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+  const { currentPassword, newPassword } = parsed.data
+  const uid = (req as any).user.id as string
+
+  const user = await prisma.user.findUnique({ where: { id: uid } })
+  if (!user) return res.status(404).json({ error: 'User not found' })
+
+  const ok = await bcrypt.compare(currentPassword, user.passwordHash)
+  if (!ok) return res.status(400).json({ error: 'Current password is incorrect' })
+
+  const hash = await bcrypt.hash(newPassword, 10)
+  await prisma.user.update({ where: { id: uid }, data: { passwordHash: hash } })
+  res.json({ ok: true })
 }))
 
 // Admin Products CRUD
