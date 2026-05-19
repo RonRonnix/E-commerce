@@ -14,7 +14,9 @@ export default function CheckoutPage() {
   const [addresses, setAddresses] = useState<any[]>([])
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
   const [showNewAddress, setShowNewAddress] = useState(false)
-  const [saveAddress, setSaveAddress] = useState(true)
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null)
+  const [savingAddress, setSavingAddress] = useState(false)
+  const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null)
   const [voucherCode, setVoucherCode] = useState('')
   const [summary, setSummary] = useState<{ subtotalCents: number; shippingCents: number; discountCents: number; totalCents: number } | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'cod'|'online'>('cod')
@@ -67,9 +69,13 @@ export default function CheckoutPage() {
     selectedAddressId ||
     (address.fullName && address.phone && address.addressLine1 && address.city && address.region && address.postalCode)
   )
+  const canSaveAddress = Boolean(
+    address.fullName && address.phone && address.addressLine1 && address.city && address.region && address.postalCode
+  )
 
   function pickAddress(item: any) {
     setSelectedAddressId(item.id)
+    setEditingAddressId(null)
     setAddress({
       fullName: item.fullName,
       phone: item.phone,
@@ -83,21 +89,79 @@ export default function CheckoutPage() {
     setShowNewAddress(false)
   }
 
+  function startNewAddress() {
+    setSelectedAddressId(null)
+    setEditingAddressId(null)
+    setAddress({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' })
+    setShowNewAddress(true)
+  }
+
+  function startEditAddress(item: any) {
+    setSelectedAddressId(item.id)
+    setEditingAddressId(item.id)
+    setAddress({
+      fullName: item.fullName,
+      phone: item.phone,
+      addressLine1: item.addressLine1,
+      addressLine2: item.addressLine2 || '',
+      city: item.city,
+      region: item.region,
+      postalCode: item.postalCode,
+      country: item.country || 'PH',
+    })
+    setShowNewAddress(true)
+  }
+
+  async function saveAddressNow() {
+    if (!canSaveAddress || savingAddress) return
+    setSavingAddress(true)
+    const isEdit = Boolean(editingAddressId)
+    const url = isEdit ? `/api/addresses/${editingAddressId}` : '/api/addresses'
+    const method = isEdit ? 'PATCH' : 'POST'
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(address),
+    })
+    if (!r.ok) {
+      show('Address save failed')
+      setSavingAddress(false)
+      return
+    }
+    const saved = await r.json()
+    setAddresses((prev) => {
+      if (isEdit) return prev.map((a) => a.id === saved.id ? saved : a)
+      return [saved, ...prev]
+    })
+    setSelectedAddressId(saved.id)
+    setEditingAddressId(null)
+    setShowNewAddress(false)
+    setSavingAddress(false)
+  }
+
+  async function deleteAddress(item: any) {
+    if (deletingAddressId) return
+    setDeletingAddressId(item.id)
+    const r = await fetch(`/api/addresses/${item.id}`, { method: 'DELETE', credentials: 'include' })
+    if (!r.ok) {
+      show('Delete failed')
+      setDeletingAddressId(null)
+      return
+    }
+    setAddresses((prev) => prev.filter((a) => a.id !== item.id))
+    if (selectedAddressId === item.id) {
+      setSelectedAddressId(null)
+      setShowNewAddress(true)
+    }
+    if (editingAddressId === item.id) {
+      setEditingAddressId(null)
+    }
+    setDeletingAddressId(null)
+  }
+
   async function placeOrder() {
     if (!user) { nav('/profile'); return }
-    if (showNewAddress && saveAddress) {
-      const r = await fetch('/api/addresses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ ...address, isDefault: addresses.length === 0 }),
-      })
-      if (r.ok) {
-        const created = await r.json()
-        setAddresses((prev) => [created, ...prev])
-        setSelectedAddressId(created.id)
-      }
-    }
     const r = await fetch('/api/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ voucherCode: voucherCode || undefined, paymentMethod, address }) })
     if (!r.ok) { show('Checkout failed'); return }
     const data = await r.json()
@@ -133,7 +197,7 @@ export default function CheckoutPage() {
             <h2 className="font-semibold">Shipping Address</h2>
             <button
               className="text-sm underline cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
-              onClick={() => { setShowNewAddress(true); setSelectedAddressId(null) }}
+              onClick={startNewAddress}
             >
               Add new address
             </button>
@@ -142,17 +206,24 @@ export default function CheckoutPage() {
           {addresses.length > 0 && (
             <div className="grid sm:grid-cols-2 gap-3 mb-4">
               {addresses.map((a: any) => (
-                <button
+                <div
                   key={a.id}
-                  className={`text-left border rounded-md p-3 cursor-pointer transition ${selectedAddressId === a.id ? 'border-black bg-gray-50' : 'hover:border-gray-400'}`}
+                  className={`text-left border rounded-md p-3 transition cursor-pointer ${selectedAddressId === a.id ? 'border-black bg-gray-50' : 'hover:border-gray-400'}`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => pickAddress(a)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') pickAddress(a) }}
                 >
                   <div className="font-medium text-sm">{a.label || a.fullName}</div>
                   <div className="text-xs text-gray-500">{a.phone}</div>
                   <div className="text-xs text-gray-500 line-clamp-2">
                     {a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}, {a.city}, {a.region}, {a.postalCode}
                   </div>
-                </button>
+                  <div className="mt-2 flex items-center gap-3 text-xs">
+                    <button type="button" className="underline" onClick={(e) => { e.stopPropagation(); startEditAddress(a) }}>Edit</button>
+                    <button type="button" className="underline text-red-600 disabled:opacity-60" disabled={deletingAddressId === a.id} onClick={(e) => { e.stopPropagation(); deleteAddress(a) }}>Delete</button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -167,10 +238,18 @@ export default function CheckoutPage() {
               <input className="border rounded-md px-3 py-2" placeholder="Region/Province" value={address.region} onChange={e=>setAddress({...address, region: e.target.value})} />
               <input className="border rounded-md px-3 py-2" placeholder="Postal code" value={address.postalCode} onChange={e=>setAddress({...address, postalCode: e.target.value})} />
               <input className="border rounded-md px-3 py-2" placeholder="Country" value={address.country} onChange={e=>setAddress({...address, country: e.target.value})} />
-              <label className="flex items-center gap-2 text-xs sm:col-span-2">
-                <input type="checkbox" checked={saveAddress} onChange={e => setSaveAddress(e.target.checked)} />
-                Save this address to my list
-              </label>
+              <div className="sm:col-span-2 flex items-center gap-3">
+                <button
+                  className="px-3 py-2 rounded-md bg-black text-white text-xs disabled:opacity-60"
+                  disabled={!canSaveAddress || savingAddress}
+                  onClick={saveAddressNow}
+                >
+                  {editingAddressId ? 'Save changes' : 'Save address'}
+                </button>
+                {editingAddressId && (
+                  <button className="text-xs underline" onClick={() => { setEditingAddressId(null); setShowNewAddress(false) }}>Cancel</button>
+                )}
+              </div>
             </div>
           )}
 
