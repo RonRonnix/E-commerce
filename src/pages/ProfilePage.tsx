@@ -136,19 +136,20 @@ export default function ProfilePage() {
             <h1 className="text-2xl font-semibold">Your Profile</h1>
             <p className="text-sm text-gray-600 mt-1">Only your public username and profile image are shown here.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowSettings(s => !s)}
-            disabled={editing}
-            className="p-2 rounded-md border hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Account settings"
-            title="Account settings"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"/>
-              <path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.54V21a2 2 0 11-4 0v-.08a1.7 1.7 0 00-1-1.54 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.54-1H3a2 2 0 110-4h.08a1.7 1.7 0 001.54-1 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34h0A1.7 1.7 0 009 3.08V3a2 2 0 114 0v.08a1.7 1.7 0 001 1.54h0a1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87v0A1.7 1.7 0 0021 11.92H21a2 2 0 110 4h-.08a1.7 1.7 0 00-1.54 1z"/>
-            </svg>
-          </button>
+          {!editing && (
+            <button
+              type="button"
+              onClick={() => setShowSettings(s => !s)}
+              className="p-2 rounded-md border hover:bg-gray-50 transition-colors"
+              aria-label="Account settings"
+              title="Account settings"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"/>
+                <path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.54V21a2 2 0 11-4 0v-.08a1.7 1.7 0 00-1-1.54 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.54-1H3a2 2 0 110-4h.08a1.7 1.7 0 001.54-1 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34h0A1.7 1.7 0 009 3.08V3a2 2 0 114 0v.08a1.7 1.7 0 001 1.54h0a1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87v0A1.7 1.7 0 0021 11.92H21a2 2 0 110 4h-.08a1.7 1.7 0 00-1.54 1z"/>
+              </svg>
+            </button>
+          )}
         </div>
 
         {showSettings && (
@@ -389,7 +390,9 @@ export default function ProfilePage() {
                   {saving ? 'Saving…' : 'Save changes'}
                 </button>
                 <button type="button" className="px-4 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={() => setConfirmCancelOpen(true)}>Cancel</button>
-                <button type="button" className="ml-auto px-4 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={() => logout()}>Log out</button>
+                {!editing && (
+                  <button type="button" className="ml-auto px-4 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={() => logout()}>Log out</button>
+                )}
               </div>
             </div>
           </form>
