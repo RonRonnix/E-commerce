@@ -32,9 +32,9 @@ async function main() {
     const gpu = await pAny.category.findUnique({ where: { slug: 'graphics-cards' } })
     const ram = await pAny.category.findUnique({ where: { slug: 'ram' } })
 
-    await prisma.product.create({ data: { title: 'Ryzen 7 7800X3D', slug: 'ryzen-7-7800x3d', brand: 'AMD', specs: 'Socket: AM5; Cores: 8; Threads: 16; Base Clock: 4.2GHz', priceCents: 185000, imageUrl: 'https://picsum.photos/seed/cpu1/600/600', category: { connect: { id: cpu.id } } } as any })
-    await prisma.product.create({ data: { title: 'GeForce RTX 4070 Super', slug: 'geforce-rtx-4070-super', brand: 'NVIDIA', specs: 'Memory: 12GB GDDR6X; Boost Clock: 2.5GHz', priceCents: 349900, imageUrl: 'https://picsum.photos/seed/gpu1/600/600', category: { connect: { id: gpu.id } } } as any })
-    await prisma.product.create({ data: { title: 'Corsair Vengeance 32GB DDR5', slug: 'corsair-vengeance-32gb-ddr5', brand: 'Corsair', specs: 'Capacity: 32GB; Speed: 6000MT/s; Type: DDR5', priceCents: 69900, imageUrl: 'https://picsum.photos/seed/ram1/600/600', category: { connect: { id: ram.id } } } as any })
+    await prisma.product.create({ data: { title: 'Ryzen 7 7800X3D', slug: 'ryzen-7-7800x3d', brand: 'AMD', specs: 'Socket: AM5; Cores: 8; Threads: 16; Base Clock: 4.2GHz', priceCents: BigInt(185000), imageUrl: 'https://picsum.photos/seed/cpu1/600/600', category: { connect: { id: cpu.id } } } as any })
+    await prisma.product.create({ data: { title: 'GeForce RTX 4070 Super', slug: 'geforce-rtx-4070-super', brand: 'NVIDIA', specs: 'Memory: 12GB GDDR6X; Boost Clock: 2.5GHz', priceCents: BigInt(349900), imageUrl: 'https://picsum.photos/seed/gpu1/600/600', category: { connect: { id: gpu.id } } } as any })
+    await prisma.product.create({ data: { title: 'Corsair Vengeance 32GB DDR5', slug: 'corsair-vengeance-32gb-ddr5', brand: 'Corsair', specs: 'Capacity: 32GB; Speed: 6000MT/s; Type: DDR5', priceCents: BigInt(69900), imageUrl: 'https://picsum.photos/seed/ram1/600/600', category: { connect: { id: ram.id } } } as any })
     console.log('Seeded categories and products')
   }
 

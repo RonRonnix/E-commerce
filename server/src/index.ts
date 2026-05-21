@@ -6,6 +6,7 @@ import { prisma } from './db'
 import { authMiddleware } from './auth'
 import multer from 'multer'
 import path from 'path'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { requireAuth, requireRole } from './auth'
@@ -14,9 +15,46 @@ import bcrypt from 'bcryptjs'
 
 const app = express()
 const WEB_ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173'
-app.use(cors({ origin: WEB_ORIGIN, credentials: true }))
+app.use(cors({ origin: WEB_ORIGIN, credentials: true, allowedHeaders: ['Content-Type', 'X-CSRF-Token'] }))
 app.use(express.json())
 app.use(cookieParser())
+app.set('json replacer', (_key, value) => (typeof value === 'bigint' ? Number(value) : value))
+app.use((req: Request, res: Response, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Referrer-Policy', 'same-origin')
+  next()
+})
+app.use((req: Request, res: Response, next) => {
+  const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(req.method)
+  if (!unsafe) return next()
+  const origin = req.headers.origin
+  if (origin && origin !== WEB_ORIGIN) return res.status(403).json({ error: 'Forbidden' })
+  next()
+})
+const CSRF_COOKIE = 'csrfToken'
+app.use((req: Request, res: Response, next) => {
+  let token = (req as any).cookies?.[CSRF_COOKIE]
+  if (!token) {
+    token = crypto.randomBytes(32).toString('hex')
+    res.cookie(CSRF_COOKIE, token, {
+      httpOnly: false,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    })
+  }
+  ;(req as any).csrfToken = token
+  next()
+})
+app.use((req: Request, res: Response, next) => {
+  const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(req.method)
+  if (!unsafe) return next()
+  const token = (req as any).cookies?.[CSRF_COOKIE]
+  const header = String(req.headers['x-csrf-token'] || '')
+  if (!token || !header || token !== header) return res.status(403).json({ error: 'CSRF blocked' })
+  next()
+})
 app.use('/api/auth', authMiddleware())
 
 // Static serving for uploaded files (dev only)
@@ -40,10 +78,20 @@ const storage = multer.diskStorage({
     cb(null, `${unique}${ext}`)
   },
 })
-const upload = multer({ storage })
+const imageFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const ok = ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
+  if (!ok) return cb(new Error('Only JPG, PNG, or WEBP images are allowed'))
+  cb(null, true)
+}
+const uploadAvatar = multer({ storage, limits: { fileSize: 2 * 1024 * 1024 }, fileFilter: imageFilter })
+const uploadProduct = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 }, fileFilter: imageFilter })
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ ok: true, time: new Date().toISOString() })
+})
+
+app.get('/api/csrf', (req: Request, res: Response) => {
+  res.json({ token: (req as any).csrfToken })
 })
 
 app.get('/api/products', async (_req: Request, res: Response) => {
@@ -77,8 +125,8 @@ app.get('/api/products', async (_req: Request, res: Response) => {
   const max = Number(maxPrice)
   if (!Number.isNaN(min) || !Number.isNaN(max)) {
     const priceWhere: any = {}
-    if (!Number.isNaN(min)) priceWhere.gte = Math.max(0, Math.round(min * 100))
-    if (!Number.isNaN(max)) priceWhere.lte = Math.max(0, Math.round(max * 100))
+    if (!Number.isNaN(min)) priceWhere.gte = BigInt(Math.max(0, Math.round(min * 100)))
+    if (!Number.isNaN(max)) priceWhere.lte = BigInt(Math.max(0, Math.round(max * 100)))
     and.push({ priceCents: priceWhere })
   }
 
@@ -393,10 +441,10 @@ app.post('/api/checkout/summary', requireAuth, asyncHandler(async (req: Request,
   const { voucherCode } = req.body || {}
   const items = await (prisma as any).cartItem.findMany({ where: { userId: uid }, include: { product: true } })
   if (!items || items.length === 0) return res.status(400).json({ error: 'Cart is empty' })
-  const subtotal = items.reduce((sum: number, i: any) => sum + (i.product.priceCents * i.quantity), 0)
-  const baseShipping = 15000 // PHP 150.00
-  const shipping = (typeof voucherCode === 'string' && voucherCode.trim().toUpperCase() === 'FREESHIP') ? 0 : baseShipping
-  const discount = 0 // can be extended later
+  const subtotal = items.reduce((sum: bigint, i: any) => sum + (BigInt(i.product.priceCents) * BigInt(i.quantity)), 0n)
+  const baseShipping = 15000n // PHP 150.00
+  const shipping = (typeof voucherCode === 'string' && voucherCode.trim().toUpperCase() === 'FREESHIP') ? 0n : baseShipping
+  const discount = 0n // can be extended later
   const total = subtotal + shipping - discount
   res.json({ items, subtotalCents: subtotal, shippingCents: shipping, discountCents: discount, totalCents: total })
 }))
@@ -424,10 +472,10 @@ app.post('/api/checkout', requireAuth, asyncHandler(async (req: Request, res: Re
 
   const cartItems = await (prisma as any).cartItem.findMany({ where: { userId: uid }, include: { product: true } })
   if (!cartItems || cartItems.length === 0) return res.status(400).json({ error: 'Cart is empty' })
-  const subtotal = cartItems.reduce((sum: number, i: any) => sum + (i.product.priceCents * i.quantity), 0)
-  const baseShipping = 15000
-  const shipping = (voucherCode && voucherCode.trim().toUpperCase() === 'FREESHIP') ? 0 : baseShipping
-  const discount = 0
+  const subtotal = cartItems.reduce((sum: bigint, i: any) => sum + (BigInt(i.product.priceCents) * BigInt(i.quantity)), 0n)
+  const baseShipping = 15000n
+  const shipping = (voucherCode && voucherCode.trim().toUpperCase() === 'FREESHIP') ? 0n : baseShipping
+  const discount = 0n
   const total = subtotal + shipping - discount
 
   const order = await prisma.$transaction(async (tx) => {
@@ -455,7 +503,7 @@ app.post('/api/checkout', requireAuth, asyncHandler(async (req: Request, res: Re
         orderId: created.id,
         productId: ci.productId,
         title: ci.product.title,
-        priceCents: ci.product.priceCents,
+        priceCents: BigInt(ci.product.priceCents),
         quantity: ci.quantity,
       } })
     }
@@ -610,7 +658,9 @@ app.get('/api/admin/analytics/best-sellers', requireAuth, requireRole('admin','o
   for (const it of items) {
     const key = String(it.productId)
     const existing = agg.get(key) || { productId: key, title: it.product?.title || it.title, imageUrl: it.product?.imageUrl || null, totalQty: 0, revenueCents: 0 }
-    const unitPrice = typeof it.priceCents === 'number' ? it.priceCents : (it.product?.priceCents ?? 0)
+    const unitPrice = typeof it.priceCents === 'number'
+      ? it.priceCents
+      : Number(it.priceCents ?? it.product?.priceCents ?? 0)
     existing.totalQty += (it.quantity || 0)
     existing.revenueCents += (it.quantity || 0) * unitPrice
     if (!existing.title && (it.product?.title || it.title)) existing.title = it.product?.title || it.title
@@ -672,7 +722,7 @@ app.get('/api/admin/analytics/sales', requireAuth, requireRole('admin','owner'),
     else if (granularity === 'monthly') b = addMonthly(d)
     else b = addYearly(d)
     if (!Number.isFinite(b) || b < 0 || b >= count) continue
-    buckets[b].totalCents += (o.totalCents || 0)
+    buckets[b].totalCents += Number(o.totalCents || 0)
   }
 
   // For yearly, labels as actual years for clarity
@@ -717,7 +767,7 @@ app.patch('/api/users/me', requireAuth, asyncHandler(async (req: Request, res: R
 }))
 
 // Profile: upload avatar
-app.post('/api/users/me/avatar', requireAuth, upload.single('avatar'), asyncHandler(async (req: Request, res: Response) => {
+app.post('/api/users/me/avatar', requireAuth, uploadAvatar.single('avatar'), asyncHandler(async (req: Request, res: Response) => {
   const file = (req as any).file as Express.Multer.File | undefined
   if (!file) return res.status(400).json({ error: 'No file uploaded' })
   const uid = (req as any).user.id as string
@@ -763,7 +813,7 @@ app.post('/api/admin/products', requireAuth, requireRole('admin','owner'), async
   const categoryId = body.categoryId ? String(body.categoryId) : undefined
   if (!title || !slug || !priceCents) return res.status(400).json({ error: 'Missing required fields' })
   try {
-  const product = await prisma.product.create({ data: { title, slug, description, brand, specs, priceCents, currency, ...(categoryId ? { category: { connect: { id: categoryId } } } : {}) } })
+  const product = await prisma.product.create({ data: { title, slug, description, brand, specs, priceCents: BigInt(priceCents), currency, ...(categoryId ? { category: { connect: { id: categoryId } } } : {}) } })
     return res.status(201).json(product)
   } catch (e: any) {
     if (e?.code === 'P2002') return res.status(409).json({ error: 'Slug already exists' })
@@ -773,7 +823,7 @@ app.post('/api/admin/products', requireAuth, requireRole('admin','owner'), async
 
 app.put('/api/admin/products/:id', requireAuth, requireRole('admin','owner'), asyncHandler(async (req: Request, res: Response) => {
   const { title, slug, description, brand, specs, priceCents, currency, categoryId, imageUrl } = req.body || {}
-  const data: any = { title, slug, description, brand, specs, priceCents: priceCents ? Number(priceCents) : undefined, currency, imageUrl }
+  const data: any = { title, slug, description, brand, specs, priceCents: priceCents ? BigInt(priceCents) : undefined, currency, imageUrl }
   if (typeof categoryId === 'string' && categoryId) data.category = { connect: { id: categoryId } }
   const product = await prisma.product.update({ where: { id: req.params.id }, data })
   res.json(product)
@@ -784,7 +834,7 @@ app.delete('/api/admin/products/:id', requireAuth, requireRole('admin','owner'),
   res.json({ ok: true })
 }))
 
-app.post('/api/admin/products/:id/images', requireAuth, requireRole('admin','owner'), upload.array('files', 8), asyncHandler(async (req: Request, res: Response) => {
+app.post('/api/admin/products/:id/images', requireAuth, requireRole('admin','owner'), uploadProduct.array('files', 8), asyncHandler(async (req: Request, res: Response) => {
   const productId = req.params.id
   const files = (req as any).files as Express.Multer.File[]
   if (!files || files.length === 0) return res.status(400).json({ error: 'No files uploaded' })

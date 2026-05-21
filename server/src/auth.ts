@@ -5,8 +5,12 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { prisma } from './db'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
+const JWT_SECRET = process.env.JWT_SECRET
 const TOKEN_NAME = 'token'
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required')
+}
 
 type JWTPayload = { uid: string }
 
@@ -102,5 +106,10 @@ function setAuthCookie(res: Response, payload: JWTPayload) {
 }
 
 function cookieOpts() {
-  return { httpOnly: true, sameSite: 'lax' as const, secure: false, path: '/' }
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+  }
 }
