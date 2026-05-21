@@ -28,7 +28,7 @@ app.use(cors({
 }))
 app.use(express.json())
 app.use(cookieParser())
-app.set('json replacer', (_key, value) => (typeof value === 'bigint' ? Number(value) : value))
+app.set('json replacer', (_key: string, value: unknown) => (typeof value === 'bigint' ? Number(value) : value))
 app.use((req: Request, res: Response, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
@@ -215,7 +215,7 @@ app.get('/api/products/:id/review-eligibility', requireAuth, asyncHandler(async 
   const productId = req.params.id
   const uid = (req as any).user.id as string
   const roles = await prisma.userRole.findMany({ where: { userId: uid }, include: { role: true } })
-  const isAdmin = roles.some(r => r.role.name === 'admin' || r.role.name === 'owner')
+  const isAdmin = roles.some((r: any) => r.role.name === 'admin' || r.role.name === 'owner')
   if (isAdmin) return res.json({ canReview: true })
   const verified = await hasVerifiedPurchase(uid, productId)
   res.json({ canReview: verified })
@@ -278,7 +278,7 @@ app.delete('/api/reviews/:id', requireAuth, asyncHandler(async (req: Request, re
   if (!review) return res.status(404).json({ error: 'Review not found' })
 
   const roles = await prisma.userRole.findMany({ where: { userId: uid }, include: { role: true } })
-  const isAdmin = roles.some(r => r.role.name === 'admin' || r.role.name === 'owner')
+  const isAdmin = roles.some((r: any) => r.role.name === 'admin' || r.role.name === 'owner')
   if (!isAdmin && review.userId !== uid) return res.status(403).json({ error: 'Forbidden' })
   if (!isAdmin) {
     const verified = await hasVerifiedPurchase(uid, review.productId)
@@ -315,7 +315,7 @@ app.get('/api/brands', async (_req: Request, res: Response) => {
     distinct: ['brand'],
     orderBy: { brand: 'asc' },
   })
-  const brands = rows.map(r => r.brand).filter(Boolean)
+  const brands = rows.map((r: any) => r.brand).filter(Boolean)
   res.json(brands)
 })
 
@@ -766,10 +766,10 @@ async function getUserDto(userId: string) {
     id: user.id,
     email: user.email,
     fullName: user.fullName || undefined,
-    isVerified: user.isVerified,
+    isVerified: (user as any).isVerified,
     username: (user as any).username || undefined,
     avatarUrl: (user as any).avatarUrl || undefined,
-    roles: roles.map(r => r.role.name),
+    roles: roles.map((r: any) => r.role.name),
   }
 }
 
@@ -836,7 +836,7 @@ app.post('/api/admin/products', requireAuth, requireRole('admin','owner'), async
   const categoryId = body.categoryId ? String(body.categoryId) : undefined
   if (!title || !slug || !priceCents) return res.status(400).json({ error: 'Missing required fields' })
   try {
-  const product = await prisma.product.create({ data: { title, slug, description, brand, specs, priceCents: BigInt(priceCents), currency, ...(categoryId ? { category: { connect: { id: categoryId } } } : {}) } })
+  const product = await (prisma as any).product.create({ data: { title, slug, description, brand, specs, priceCents: BigInt(priceCents), currency, ...(categoryId ? { category: { connect: { id: categoryId } } } : {}) } })
     return res.status(201).json(product)
   } catch (e: any) {
     if (e?.code === 'P2002') return res.status(409).json({ error: 'Slug already exists' })
@@ -848,7 +848,7 @@ app.put('/api/admin/products/:id', requireAuth, requireRole('admin','owner'), as
   const { title, slug, description, brand, specs, priceCents, currency, categoryId, imageUrl } = req.body || {}
   const data: any = { title, slug, description, brand, specs, priceCents: priceCents ? BigInt(priceCents) : undefined, currency, imageUrl }
   if (typeof categoryId === 'string' && categoryId) data.category = { connect: { id: categoryId } }
-  const product = await prisma.product.update({ where: { id: req.params.id }, data })
+  const product = await (prisma as any).product.update({ where: { id: req.params.id }, data })
   res.json(product)
 }))
 

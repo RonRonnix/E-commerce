@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { prisma } from '../db'
 
 let app: any
-let agent: request.SuperAgentTest
+let agent: any
 let userId = ''
 let productId = ''
 let categoryId = ''
@@ -52,7 +52,7 @@ beforeAll(async () => {
   const productSlug = `prod-${suffix}`
   const category = await prisma.category.create({ data: { name: 'Test Category', slug } })
   categoryId = category.id
-  const product = await prisma.product.create({
+  const product = await (prisma as any).product.create({
     data: {
       title: 'Test Product',
       slug: productSlug,

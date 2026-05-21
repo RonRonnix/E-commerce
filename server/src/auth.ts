@@ -11,6 +11,7 @@ const TOKEN_NAME = 'token'
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is required')
 }
+const JWT_SECRET_VALUE = JWT_SECRET
 
 type JWTPayload = { uid: string }
 
@@ -65,7 +66,7 @@ export function authMiddleware() {
 
     setAuthCookie(res, { uid: user.id })
     const roles = await prisma.userRole.findMany({ where: { userId: user.id }, include: { role: true } })
-    res.json({ id: user.id, email: user.email, fullName: user.fullName, username: (user as any).username || undefined, avatarUrl: (user as any).avatarUrl || undefined, roles: roles.map(r => r.role.name) })
+    res.json({ id: user.id, email: user.email, fullName: user.fullName, username: (user as any).username || undefined, avatarUrl: (user as any).avatarUrl || undefined, roles: roles.map((r: any) => r.role.name) })
   })
 
   router.post('/logout', (_req: Request, res: Response) => {
@@ -82,8 +83,10 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   const token = req.cookies?.[TOKEN_NAME]
   if (!token) return res.status(401).json({ error: 'Unauthorized' })
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as JWTPayload
-    req.user = { id: payload.uid }
+    const decoded = jwt.verify(token, JWT_SECRET_VALUE) as jwt.JwtPayload
+    const uid = decoded?.uid
+    if (!uid || typeof uid !== 'string') return res.status(401).json({ error: 'Unauthorized' })
+    req.user = { id: uid }
     next()
   } catch {
     return res.status(401).json({ error: 'Unauthorized' })
@@ -94,14 +97,14 @@ export function requireRole(...roles: Array<'admin' | 'owner'>) {
   return async (req: AuthedRequest, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' })
     const userRoles = await prisma.userRole.findMany({ where: { userId: req.user.id }, include: { role: true } })
-    const ok = userRoles.some(ur => roles.includes(ur.role.name as any))
+    const ok = userRoles.some((ur: any) => roles.includes(ur.role.name as any))
     if (!ok) return res.status(403).json({ error: 'Forbidden' })
     next()
   }
 }
 
 function setAuthCookie(res: Response, payload: JWTPayload) {
-  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })
+  const token = jwt.sign(payload, JWT_SECRET_VALUE, { expiresIn: '7d' })
   res.cookie(TOKEN_NAME, token, cookieOpts())
 }
 

@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { prisma } from '../db'
 
 let app: any
-let agent: request.SuperAgentTest
+let agent: any
 let userId = ''
 let productId = ''
 let categoryId = ''

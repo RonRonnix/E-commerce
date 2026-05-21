@@ -5,8 +5,8 @@ import { prisma } from '../db'
 import bcrypt from 'bcryptjs'
 
 let app: any
-let agent: request.SuperAgentTest
-let adminAgent: request.SuperAgentTest
+let agent: any
+let adminAgent: any
 let adminUserId = ''
 let userId = ''
 
