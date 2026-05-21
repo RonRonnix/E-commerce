@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../components/AuthContext'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useToaster } from '../components/Toaster'
 
 export default function ProfilePage() {
   const { user, loading, login, register, logout, updateProfile, updateAvatar, updatePassword } = useAuth()
+  const { show } = useToaster()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -33,6 +36,20 @@ export default function ProfilePage() {
   // Orders state
   const [orders, setOrders] = useState<Array<any>>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
+  // Saved addresses
+  const [addresses, setAddresses] = useState<Array<any>>([])
+  const [addressesLoading, setAddressesLoading] = useState(false)
+  const [showAddressForm, setShowAddressForm] = useState(false)
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null)
+  const [addressForm, setAddressForm] = useState({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' })
+  const [addressBaseline, setAddressBaseline] = useState({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' })
+  const [savingAddress, setSavingAddress] = useState(false)
+  const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null)
+  const [addressSaveConfirmOpen, setAddressSaveConfirmOpen] = useState(false)
+  const [addressDeleteConfirmOpen, setAddressDeleteConfirmOpen] = useState(false)
+  const [addressDiscardOpen, setAddressDiscardOpen] = useState(false)
+  const [pendingAddressAction, setPendingAddressAction] = useState<any | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<any | null>(null)
 
   useEffect(() => {
     setUsername(user?.username || '')
@@ -47,6 +64,17 @@ export default function ProfilePage() {
       .then(r => r.ok ? r.json() : [])
       .then((data) => { if (!cancelled) setOrders(data) })
       .finally(() => { if (!cancelled) setOrdersLoading(false) })
+    return () => { cancelled = true }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!user) { setAddresses([]); return }
+    let cancelled = false
+    setAddressesLoading(true)
+    fetch('/api/addresses', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then((data) => { if (!cancelled) setAddresses(data) })
+      .finally(() => { if (!cancelled) setAddressesLoading(false) })
     return () => { cancelled = true }
   }, [user?.id])
 
@@ -126,6 +154,110 @@ export default function ProfilePage() {
     } finally {
       setPasswordSaving(false)
     }
+  }
+
+  const addressKeys = ['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'region', 'postalCode', 'country'] as const
+  const isAddressDirty = showAddressForm && addressKeys.some((k) => (addressForm[k] ?? '') !== (addressBaseline[k] ?? ''))
+  const canSaveAddress = Boolean(
+    addressForm.fullName && addressForm.phone && addressForm.addressLine1 && addressForm.city && addressForm.region && addressForm.postalCode
+  )
+
+  function beginNewAddress() {
+    const blank = { fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' }
+    setEditingAddressId(null)
+    setAddressForm(blank)
+    setAddressBaseline(blank)
+    setShowAddressForm(true)
+  }
+
+  function beginEditAddress(item: any) {
+    const next = {
+      fullName: item.fullName,
+      phone: item.phone,
+      addressLine1: item.addressLine1,
+      addressLine2: item.addressLine2 || '',
+      city: item.city,
+      region: item.region,
+      postalCode: item.postalCode,
+      country: item.country || 'PH',
+    }
+    setEditingAddressId(item.id)
+    setAddressForm(next)
+    setAddressBaseline(next)
+    setShowAddressForm(true)
+  }
+
+  function runAddressAction(action: any) {
+    if (!action) return
+    if (action.type === 'new') beginNewAddress()
+    if (action.type === 'edit') beginEditAddress(action.item)
+    if (action.type === 'cancel') {
+      setEditingAddressId(null)
+      setShowAddressForm(false)
+    }
+  }
+
+  function requestAddressAction(action: any) {
+    if (!isAddressDirty) {
+      runAddressAction(action)
+      return
+    }
+    setPendingAddressAction(action)
+    setAddressDiscardOpen(true)
+  }
+
+  async function saveAddressNow() {
+    if (!canSaveAddress || savingAddress) return
+    setSavingAddress(true)
+    const isEdit = Boolean(editingAddressId)
+    const url = isEdit ? `/api/addresses/${editingAddressId}` : '/api/addresses'
+    const method = isEdit ? 'PATCH' : 'POST'
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(addressForm),
+    })
+    if (!r.ok) {
+      show('Address save failed')
+      setSavingAddress(false)
+      return
+    }
+    const saved = await r.json()
+    setAddresses((prev) => {
+      if (isEdit) return prev.map((a) => a.id === saved.id ? saved : a)
+      return [saved, ...prev]
+    })
+    setEditingAddressId(null)
+    setShowAddressForm(false)
+    setAddressBaseline({
+      fullName: saved.fullName,
+      phone: saved.phone,
+      addressLine1: saved.addressLine1,
+      addressLine2: saved.addressLine2 || '',
+      city: saved.city,
+      region: saved.region,
+      postalCode: saved.postalCode,
+      country: saved.country || 'PH',
+    })
+    setSavingAddress(false)
+  }
+
+  async function deleteAddressNow(item: any) {
+    if (deletingAddressId) return
+    setDeletingAddressId(item.id)
+    const r = await fetch(`/api/addresses/${item.id}`, { method: 'DELETE', credentials: 'include' })
+    if (!r.ok) {
+      show('Delete failed')
+      setDeletingAddressId(null)
+      return
+    }
+    setAddresses((prev) => prev.filter((a) => a.id !== item.id))
+    if (editingAddressId === item.id) {
+      setEditingAddressId(null)
+      setShowAddressForm(false)
+    }
+    setDeletingAddressId(null)
   }
 
   if (user) {
@@ -273,7 +405,60 @@ export default function ProfilePage() {
                 </div>
               </div>
             )}
-            {settingsSection && settingsSection !== 'account' && (
+            {settingsSection === 'addresses' && (
+              <div className="mt-5 rounded-lg border p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">Saved Addresses</h3>
+                  <button type="button" className="text-sm underline cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" onClick={() => requestAddressAction({ type: 'new' })}>Add address</button>
+                </div>
+                {addressesLoading ? (
+                  <div className="mt-3 text-sm text-gray-600">Loading addresses…</div>
+                ) : addresses.length === 0 ? (
+                  <div className="mt-3 text-sm text-gray-600">No saved addresses yet.</div>
+                ) : (
+                  <div className="mt-3 grid sm:grid-cols-2 gap-3">
+                    {addresses.map((a) => (
+                      <div key={a.id} className="text-left border rounded-md p-3">
+                        <div className="font-medium text-sm">{a.label || a.fullName}</div>
+                        <div className="text-xs text-gray-500">{a.phone}</div>
+                        <div className="text-xs text-gray-500 line-clamp-2">
+                          {a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}, {a.city}, {a.region}, {a.postalCode}
+                        </div>
+                        <div className="mt-2 flex items-center gap-3 text-xs">
+                          <button type="button" className="underline cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" onClick={() => requestAddressAction({ type: 'edit', item: a })}>Edit</button>
+                          <button type="button" className="underline text-red-600 disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" disabled={deletingAddressId === a.id} onClick={() => { setPendingDelete(a); setAddressDeleteConfirmOpen(true) }}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {showAddressForm && (
+                  <div className="mt-4 grid sm:grid-cols-2 gap-3">
+                    <input className="border rounded-md px-3 py-2" placeholder="Full name" value={addressForm.fullName} onChange={e=>setAddressForm({...addressForm, fullName: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="Phone" value={addressForm.phone} onChange={e=>setAddressForm({...addressForm, phone: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 1" value={addressForm.addressLine1} onChange={e=>setAddressForm({...addressForm, addressLine1: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 2 (optional)" value={addressForm.addressLine2} onChange={e=>setAddressForm({...addressForm, addressLine2: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="City" value={addressForm.city} onChange={e=>setAddressForm({...addressForm, city: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="Region/Province" value={addressForm.region} onChange={e=>setAddressForm({...addressForm, region: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="Postal code" value={addressForm.postalCode} onChange={e=>setAddressForm({...addressForm, postalCode: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="Country" value={addressForm.country} onChange={e=>setAddressForm({...addressForm, country: e.target.value})} />
+                    <div className="sm:col-span-2 flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-md bg-black text-white text-xs disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
+                        disabled={!canSaveAddress || savingAddress}
+                        onClick={() => setAddressSaveConfirmOpen(true)}
+                      >
+                        {editingAddressId ? 'Save changes' : 'Save address'}
+                      </button>
+                      <button type="button" className="text-xs underline cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" onClick={() => requestAddressAction({ type: 'cancel' })}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {settingsSection && settingsSection !== 'account' && settingsSection !== 'addresses' && (
               <div className="mt-5 rounded-lg border p-4 text-sm text-gray-600">
                 This section is coming soon.
               </div>
@@ -325,6 +510,34 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
+
+        <ConfirmDialog
+          open={addressDiscardOpen}
+          title="Discard changes?"
+          message="You have unsaved address changes. Discard them and continue?"
+          confirmText="Discard"
+          cancelText="Keep editing"
+          onConfirm={() => { setAddressDiscardOpen(false); runAddressAction(pendingAddressAction); setPendingAddressAction(null) }}
+          onCancel={() => { setAddressDiscardOpen(false); setPendingAddressAction(null) }}
+        />
+        <ConfirmDialog
+          open={addressSaveConfirmOpen}
+          title={editingAddressId ? 'Save changes?' : 'Save address?'}
+          message={editingAddressId ? 'Save your updated address details?' : 'Save this address to your list?'}
+          confirmText="Save"
+          cancelText="Keep editing"
+          onConfirm={() => { setAddressSaveConfirmOpen(false); saveAddressNow() }}
+          onCancel={() => setAddressSaveConfirmOpen(false)}
+        />
+        <ConfirmDialog
+          open={addressDeleteConfirmOpen}
+          title="Delete address?"
+          message="This will remove the address from your list."
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => { setAddressDeleteConfirmOpen(false); if (pendingDelete) deleteAddressNow(pendingDelete); setPendingDelete(null) }}
+          onCancel={() => { setAddressDeleteConfirmOpen(false); setPendingDelete(null) }}
+        />
 
         {!editing ? (
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-6 items-center">
