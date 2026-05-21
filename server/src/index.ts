@@ -12,10 +12,20 @@ import fs from 'fs'
 import { requireAuth, requireRole } from './auth'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+import rateLimit from 'express-rate-limit'
 
 const app = express()
 const WEB_ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173'
-app.use(cors({ origin: WEB_ORIGIN, credentials: true, allowedHeaders: ['Content-Type', 'X-CSRF-Token'] }))
+const allowedOrigins = WEB_ORIGIN.split(',').map(o => o.trim()).filter(Boolean)
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true)
+    if (allowedOrigins.includes(origin)) return cb(null, true)
+    return cb(new Error('CORS blocked'))
+  },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'X-CSRF-Token'],
+}))
 app.use(express.json())
 app.use(cookieParser())
 app.set('json replacer', (_key, value) => (typeof value === 'bigint' ? Number(value) : value))
@@ -55,7 +65,20 @@ app.use((req: Request, res: Response, next) => {
   if (!token || !header || token !== header) return res.status(403).json({ error: 'CSRF blocked' })
   next()
 })
-app.use('/api/auth', authMiddleware())
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+const apiLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+app.use('/api', apiLimiter)
+app.use('/api/auth', authLimiter, authMiddleware())
 
 // Static serving for uploaded files (dev only)
 // Use a stable path inside the server folder regardless of CWD
@@ -867,6 +890,10 @@ function asyncHandler(fn: (req: Request, res: Response) => Promise<any>) {
 }
 
 const PORT = Number(process.env.PORT ?? 4000)
-app.listen(PORT, () => {
-  console.log(`API listening on http://localhost:${PORT}`)
-})
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`API listening on http://localhost:${PORT}`)
+  })
+}
+
+export { app }
