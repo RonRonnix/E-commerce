@@ -140,7 +140,7 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={() => setShowSettings(s => !s)}
-              className="p-2 rounded-md border hover:bg-gray-50 transition-colors"
+              className="p-2 rounded-md border hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95"
               aria-label="Account settings"
               title="Account settings"
             >
@@ -159,30 +159,30 @@ export default function ProfilePage() {
                 <h2 className="text-lg font-semibold">Account Settings</h2>
                 <p className="text-sm text-gray-600">Manage your account preferences and saved details.</p>
               </div>
-              <button type="button" className="text-sm text-gray-600 hover:underline" onClick={() => setShowSettings(false)}>Close</button>
+              <button type="button" className="text-sm text-gray-600 hover:underline cursor-pointer" onClick={() => setShowSettings(false)}>Close</button>
             </div>
             <div className="mt-4 grid sm:grid-cols-2 gap-3">
-              <button type="button" onClick={() => setSettingsSection('account')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'account' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('account')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 ${settingsSection === 'account' ? 'border-black' : ''}`}>
                 <div className="font-medium">Account Details</div>
                 <div className="text-xs text-gray-600">Profile info, email, password</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('addresses')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'addresses' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('addresses')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'addresses' ? 'border-black' : ''}`}>
                 <div className="font-medium">Saved Addresses</div>
                 <div className="text-xs text-gray-600">Shipping and billing addresses</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('payments')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'payments' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('payments')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'payments' ? 'border-black' : ''}`}>
                 <div className="font-medium">Bank Accounts / Cards</div>
                 <div className="text-xs text-gray-600">Payment methods and billing</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('notifications')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'notifications' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('notifications')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'notifications' ? 'border-black' : ''}`}>
                 <div className="font-medium">Notification Settings</div>
                 <div className="text-xs text-gray-600">Order and marketing alerts</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('privacy')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'privacy' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('privacy')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'privacy' ? 'border-black' : ''}`}>
                 <div className="font-medium">Privacy Settings</div>
                 <div className="text-xs text-gray-600">Profile visibility and data</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('security')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 ${settingsSection === 'security' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('security')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'security' ? 'border-black' : ''}`}>
                 <div className="font-medium">Security</div>
                 <div className="text-xs text-gray-600">Two-factor and login activity</div>
               </button>
@@ -270,9 +270,6 @@ export default function ProfilePage() {
                       </form>
                     )}
                   </div>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <button type="button" className="px-3 py-2 rounded-md border text-sm" onClick={() => setEditing(true)}>Edit profile</button>
                 </div>
               </div>
             )}
