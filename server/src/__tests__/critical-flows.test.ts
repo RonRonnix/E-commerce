@@ -47,8 +47,9 @@ beforeAll(async () => {
   expect(register.status).toBe(201)
   userId = register.body?.id
 
-  const slug = `cat-${Date.now()}`
-  const productSlug = `prod-${Date.now()}`
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const slug = `cat-${suffix}`
+  const productSlug = `prod-${suffix}`
   const category = await prisma.category.create({ data: { name: 'Test Category', slug } })
   categoryId = category.id
   const product = await prisma.product.create({
