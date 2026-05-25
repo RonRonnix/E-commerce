@@ -26,3 +26,4 @@ dist-ssr
 # Env files
 .env
 server/.env
+server/.env.example
