@@ -10,6 +10,7 @@ export default function PaymentPage() {
   const [email, setEmail] = useState('')
   const [card, setCard] = useState({ name: '', number: '', expMonth: '', expYear: '', cvc: '' })
   const [error, setError] = useState<string | null>(null)
+  const [handledPaid, setHandledPaid] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -17,6 +18,14 @@ export default function PaymentPage() {
       .then(r => r.ok ? r.json() : null)
       .then(setPayment)
   }, [id])
+
+  useEffect(() => {
+    if (!payment || handledPaid) return
+    if (payment.status === 'paid') {
+      setHandledPaid(true)
+      nav('/payment-success')
+    }
+  }, [payment, handledPaid, nav])
 
   async function pay() {
     if (!id) return
@@ -49,7 +58,7 @@ export default function PaymentPage() {
       return
     }
     if (data?.status === 'succeeded') {
-      nav('/orders')
+      nav('/payment-success')
       return
     }
     nav('/orders')

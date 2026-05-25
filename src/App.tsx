@@ -20,6 +20,7 @@ import { WishlistProvider } from './components/WishlistContext'
 import WishlistPage from './pages/WishlistPage'
 import CheckoutPage from './pages/CheckoutPage'
 import PaymentPage from './pages/PaymentPage'
+import PaymentSuccessPage from './pages/PaymentSuccessPage'
 import OrderDetailsPage from './pages/OrderDetailsPage'
 import Orders from './pages/admin/Orders'
 import UserOrders from './pages/admin/UserOrders'
@@ -45,6 +46,7 @@ export default function App() {
               <Route path="/cart" element={<CartPage />} />
               <Route path="/checkout" element={<CheckoutPage />} />
               <Route path="/payment/:id" element={<PaymentPage />} />
+              <Route path="/payment-success" element={<PaymentSuccessPage />} />
               <Route path="/orders/:id" element={<OrderDetailsPage />} />
               <Route path="/wishlist" element={<WishlistPage />} />
               <Route
