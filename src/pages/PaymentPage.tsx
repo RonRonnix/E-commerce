@@ -7,6 +7,7 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(false)
   const [payment, setPayment] = useState<any | null>(null)
   const [method, setMethod] = useState<'card' | 'gcash' | 'paymaya'>('card')
+  const [email, setEmail] = useState('')
   const [card, setCard] = useState({ name: '', number: '', expMonth: '', expYear: '', cvc: '' })
   const [error, setError] = useState<string | null>(null)
 
@@ -21,7 +22,7 @@ export default function PaymentPage() {
     if (!id) return
     setLoading(true)
     setError(null)
-    const payload: any = { method }
+    const payload: any = { method, email }
     if (method === 'card') {
       payload.card = {
         name: card.name,
@@ -62,6 +63,7 @@ export default function PaymentPage() {
         <div className="mt-3 text-sm text-gray-600">Amount: PHP {Number(payment.amountCents || 0) / 100}</div>
       )}
       <div className="mt-6 space-y-4 max-w-xl">
+        <input className="border rounded-md px-3 py-2 w-full" placeholder="Billing email" value={email} onChange={e => setEmail(e.target.value)} />
         <div className="flex gap-4 text-sm">
           <label className="flex items-center gap-2"><input type="radio" checked={method === 'card'} onChange={() => setMethod('card')} /> Card</label>
           <label className="flex items-center gap-2"><input type="radio" checked={method === 'gcash'} onChange={() => setMethod('gcash')} /> GCash</label>
