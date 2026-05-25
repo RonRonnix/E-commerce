@@ -35,7 +35,7 @@ export default function App() {
             <WishlistProvider>
         <div className="min-h-full flex flex-col">
           <Navbar />
-          <main className="flex-1">
+          <main className="flex-1 flex flex-col">
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/profile" element={<ProfilePage />} />

@@ -13,11 +13,11 @@ export default function PaymentSuccessPage() {
   }, [nav])
 
   return (
-    <section className="container-xl py-12">
+    <section className="flex-1 flex items-center justify-center px-4">
       <div className="max-w-xl rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold">Payment successful</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Thanks for your order. You will be redirected to your profile in 3 seconds.
+          Thank you for your order. You will be redirected to your profile in 3 seconds.
         </p>
         <div className="mt-6 flex gap-3">
           <Link

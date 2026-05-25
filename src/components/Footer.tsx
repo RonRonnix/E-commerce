@@ -18,7 +18,7 @@ export default function Footer() {
   ]
 
   return (
-    <footer className="bg-black text-white mt-14">
+    <footer className="bg-black">
       <div className="container-xl py-14 grid gap-12 md:grid-cols-3">
         {/* Brand and about */}
         <div>
