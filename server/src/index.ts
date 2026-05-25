@@ -19,6 +19,7 @@ const WEB_ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173'
 const PAYMONGO_SECRET_KEY = process.env.PAYMONGO_SECRET_KEY
 const PAYMONGO_WEBHOOK_SECRET = process.env.PAYMONGO_WEBHOOK_SECRET
 const PAYMONGO_SKIP_WEBHOOK_SIGNATURE = process.env.PAYMONGO_SKIP_WEBHOOK_SIGNATURE === 'true'
+const PAYMONGO_WEBHOOK_MAX_SKEW_SECONDS = 5 * 60
 const allowedOrigins = WEB_ORIGIN.split(',').map(o => o.trim()).filter(Boolean)
 app.use(cors({
   origin: (origin, cb) => {
@@ -42,15 +43,34 @@ app.post('/api/paymongo/webhook', express.raw({ type: 'application/json' }), asy
   const signature = String(req.headers['paymongo-signature'] || '')
   const parts = signature.split(',').map(p => p.trim())
   const timestamp = parts.find(p => p.startsWith('t='))?.slice(2)
-  const v1 = parts.find(p => p.startsWith('v1='))?.slice(3) || parts.find(p => p.startsWith('s='))?.slice(2)
-  if ((!timestamp || !v1) && !PAYMONGO_SKIP_WEBHOOK_SIGNATURE) return res.status(400).json({ error: 'Invalid signature' })
+  const v1List = parts.filter(p => p.startsWith('v1=')).map(p => p.slice(3))
+  const sList = parts.filter(p => p.startsWith('s=')).map(p => p.slice(2))
+  const teList = parts.filter(p => p.startsWith('te=')).map(p => p.slice(3))
+  const liList = parts.filter(p => p.startsWith('li=')).map(p => p.slice(3))
+  const sigList = [...v1List, ...sList]
+  const sigAltList = parts.filter(p => p.startsWith('sig=') || p.startsWith('signature=')).map(p => p.split('=')[1])
+  const allSigs = [...sigList, ...sigAltList, ...teList, ...liList].filter(Boolean)
+  if ((!timestamp || allSigs.length === 0) && !PAYMONGO_SKIP_WEBHOOK_SIGNATURE) {
+    console.warn('[paymongo:webhook] Missing signature parts', { hasTimestamp: Boolean(timestamp), v1Count: v1List.length, sCount: sList.length, teCount: teList.length, liCount: liList.length, signature })
+    return res.status(400).json({ error: 'Invalid signature' })
+  }
 
   const rawBody = (req as any).body as Buffer
   const rawText = rawBody.toString('utf8')
   const payload = `${timestamp}.${rawText}`
   const expected = crypto.createHmac('sha256', PAYMONGO_WEBHOOK_SECRET).update(payload).digest('hex')
-  const altExpected = crypto.createHmac('sha256', PAYMONGO_WEBHOOK_SECRET).update(rawText).digest('hex')
-  if ((expected !== v1 && altExpected !== v1) && !PAYMONGO_SKIP_WEBHOOK_SIGNATURE) return res.status(400).json({ error: 'Invalid signature' })
+  if (!PAYMONGO_SKIP_WEBHOOK_SIGNATURE) {
+    const now = Math.floor(Date.now() / 1000)
+    const ts = Number(timestamp)
+    if (!Number.isFinite(ts) || Math.abs(now - ts) > PAYMONGO_WEBHOOK_MAX_SKEW_SECONDS) {
+      console.warn('[paymongo:webhook] Timestamp out of range', { now, ts, skew: Math.abs(now - ts) })
+      return res.status(400).json({ error: 'Signature timestamp out of range' })
+    }
+    if (!allSigs.some(v1 => v1 === expected)) {
+      console.warn('[paymongo:webhook] Signature mismatch', { v1Count: v1List.length, sCount: sList.length, teCount: teList.length, liCount: liList.length, sigAltCount: sigAltList.length, expectedPrefix: expected.slice(0, 8) })
+      return res.status(400).json({ error: 'Invalid signature' })
+    }
+  }
 
   const event = JSON.parse(rawText)
   const type = event?.data?.attributes?.type || event?.data?.type || ''
