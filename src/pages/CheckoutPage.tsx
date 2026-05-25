@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../components/AuthContext'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useToaster } from '../components/Toaster'
@@ -8,6 +8,7 @@ import { useCart } from '../components/CartContext'
 export default function CheckoutPage() {
   const { user } = useAuth()
   const nav = useNavigate()
+  const [searchParams] = useSearchParams()
   const { show } = useToaster()
   const { refresh: refreshCart } = useCart()
   const [items, setItems] = useState<Array<{ product: any, quantity: number }>>([])
@@ -31,16 +32,28 @@ export default function CheckoutPage() {
   const [pendingDelete, setPendingDelete] = useState<any | null>(null)
   const [lastNoChangeToastAt, setLastNoChangeToastAt] = useState(0)
 
+  const quickProductId = searchParams.get('productId')
+  const quickQty = Math.max(1, Number(searchParams.get('qty') || 1))
+  const isQuick = Boolean(quickProductId)
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
+    const itemsPromise = isQuick && quickProductId
+      ? fetch(`/api/products/${quickProductId}`).then(r => r.ok ? r.json() : Promise.reject(new Error('Product not found')))
+      : fetch('/api/cart', { credentials: 'include' }).then(r => r.ok ? r.json() : [])
+
     Promise.all([
-      fetch('/api/cart', { credentials: 'include' }).then(r => r.ok ? r.json() : []),
+      itemsPromise,
       fetch('/api/addresses', { credentials: 'include' }).then(r => r.ok ? r.json() : []),
     ])
-      .then(([cartData, addressData]) => {
+      .then(([itemsData, addressData]) => {
         if (cancelled) return
-        setItems(cartData)
+        if (isQuick && quickProductId) {
+          setItems([{ product: itemsData, quantity: quickQty }])
+        } else {
+          setItems(itemsData)
+        }
         setAddresses(addressData)
         const defaultAddress = addressData.find((a: any) => a.isDefault) || addressData[0]
         if (defaultAddress) {
@@ -67,14 +80,18 @@ export default function CheckoutPage() {
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, [isQuick, quickProductId, quickQty])
 
   useEffect(() => {
     // recompute summary whenever voucher changes
-    fetch('/api/checkout/summary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ voucherCode }) })
-      .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed'))) 
+    const url = isQuick ? '/api/checkout/quick/summary' : '/api/checkout/summary'
+    const body = isQuick
+      ? { voucherCode, productId: quickProductId, quantity: quickQty }
+      : { voucherCode }
+    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body) })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed')))
       .then(setSummary).catch(() => setSummary(null))
-  }, [voucherCode])
+  }, [voucherCode, isQuick, quickProductId, quickQty])
 
   const price = (cents: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format((cents || 0)/100)
   const addressReady = Boolean(
@@ -263,10 +280,14 @@ export default function CheckoutPage() {
 
   async function placeOrder() {
     if (!user) { nav('/profile'); return }
-    const r = await fetch('/api/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ voucherCode: voucherCode || undefined, paymentMethod, address }) })
+    const url = isQuick ? '/api/checkout/quick' : '/api/checkout'
+    const body = isQuick
+      ? { voucherCode: voucherCode || undefined, paymentMethod, address, productId: quickProductId, quantity: quickQty }
+      : { voucherCode: voucherCode || undefined, paymentMethod, address }
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body) })
     if (!r.ok) { show('Checkout failed'); return }
     const data = await r.json()
-    await refreshCart()
+    if (!isQuick) await refreshCart()
     if (paymentMethod === 'online' && data.paymentId) {
       nav(`/payment/${data.paymentId}`)
     } else {

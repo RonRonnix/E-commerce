@@ -504,6 +504,29 @@ app.post('/api/checkout/summary', requireAuth, asyncHandler(async (req: Request,
   res.json({ items, subtotalCents: subtotal, shippingCents: shipping, discountCents: discount, totalCents: total })
 }))
 
+// Checkout: compute summary for single item (Buy Now)
+app.post('/api/checkout/quick/summary', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const schema = z.object({
+    productId: z.string().min(1),
+    quantity: z.number().int().min(1).max(99),
+    voucherCode: z.string().trim().optional(),
+  })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+  const { productId, quantity, voucherCode } = parsed.data
+
+  const product = await (prisma as any).product.findUnique({ where: { id: productId } })
+  if (!product) return res.status(404).json({ error: 'Product not found' })
+
+  const subtotal = BigInt(product.priceCents) * BigInt(quantity)
+  const baseShipping = 15000n // PHP 150.00
+  const shipping = (typeof voucherCode === 'string' && voucherCode.trim().toUpperCase() === 'FREESHIP') ? 0n : baseShipping
+  const discount = 0n
+  const total = subtotal + shipping - discount
+  const items = [{ product, quantity }]
+  res.json({ items, subtotalCents: subtotal, shippingCents: shipping, discountCents: discount, totalCents: total })
+}))
+
 // Place order: creates order and items from cart and clears cart
 app.post('/api/checkout', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const uid = (req as any).user.id as string
@@ -565,6 +588,82 @@ app.post('/api/checkout', requireAuth, asyncHandler(async (req: Request, res: Re
     // clear cart
     await (tx as any).cartItem.deleteMany({ where: { userId: uid } })
     // payment placeholder for online
+    await (tx as any).payment.create({ data: {
+      orderId: created.id,
+      method: 'online',
+      status: 'pending',
+      provider: 'paymongo',
+      amountCents: total,
+    } })
+    return created
+  })
+
+  const result: any = { orderId: (order as any).id }
+  const payment = await (prisma as any).payment.findUnique({ where: { orderId: (order as any).id } })
+  result.paymentId = payment?.id
+  res.status(201).json(result)
+}))
+
+// Place order: single item (Buy Now)
+app.post('/api/checkout/quick', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const uid = (req as any).user.id as string
+  const schema = z.object({
+    productId: z.string().min(1),
+    quantity: z.number().int().min(1).max(99),
+    voucherCode: z.string().trim().optional(),
+    paymentMethod: z.enum(['online']),
+    address: z.object({
+      fullName: z.string().min(2),
+      phone: z.string().min(5),
+      addressLine1: z.string().min(3),
+      addressLine2: z.string().optional(),
+      city: z.string().min(2),
+      region: z.string().min(2),
+      postalCode: z.string().min(3),
+      country: z.string().default('PH'),
+    }),
+  })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+  const { productId, quantity, voucherCode, paymentMethod, address } = parsed.data
+
+  const product = await (prisma as any).product.findUnique({ where: { id: productId } })
+  if (!product) return res.status(404).json({ error: 'Product not found' })
+
+  const subtotal = BigInt(product.priceCents) * BigInt(quantity)
+  const baseShipping = 15000n
+  const shipping = (voucherCode && voucherCode.trim().toUpperCase() === 'FREESHIP') ? 0n : baseShipping
+  const discount = 0n
+  const total = subtotal + shipping - discount
+
+  const order = await prisma.$transaction(async (tx) => {
+    const created = await (tx as any).order.create({ data: {
+      userId: uid,
+      status: 'pending',
+      paymentMethod,
+      voucherCode: voucherCode || null,
+      subtotalCents: subtotal,
+      shippingCents: shipping,
+      discountCents: discount,
+      totalCents: total,
+      fullName: address.fullName,
+      phone: address.phone,
+      addressLine1: address.addressLine1,
+      addressLine2: address.addressLine2 || null,
+      city: address.city,
+      region: address.region,
+      postalCode: address.postalCode,
+      country: address.country || 'PH',
+    } })
+
+    await (tx as any).orderItem.create({ data: {
+      orderId: created.id,
+      productId: product.id,
+      title: product.title,
+      priceCents: BigInt(product.priceCents),
+      quantity,
+    } })
+
     await (tx as any).payment.create({ data: {
       orderId: created.id,
       method: 'online',

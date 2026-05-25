@@ -166,6 +166,27 @@ export default function ProductPage() {
     }
   }
 
+  async function buyNow() {
+    if (!user) {
+      navigate('/profile')
+      return
+    }
+    if (!product) return
+    const r = await fetch('/api/cart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ productId: product.id, quantity: qty }),
+    })
+    if (!r.ok) {
+      const msg = await getErrorMessage(r, 'Failed to add to cart')
+      show(msg)
+      return
+    }
+    await refresh()
+    navigate(`/checkout?productId=${product.id}&qty=${qty}`)
+  }
+
   async function toggleWishlist() {
     if (!user || !product) { navigate('/profile'); return }
     if (wishLoading) return
@@ -276,7 +297,7 @@ export default function ProductPage() {
               <button className="px-2 py-1 border rounded cursor-pointer transition-transform duration-150 hover:scale-[1.06] active:scale-95" onClick={() => setQty(q => q + 1)}>+</button>
             </div>
             <button className="px-4 py-2 rounded-md bg-black text-white cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={addToCart}>Add to Cart</button>
-            <button className="px-4 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95">Buy Now</button>
+            <button className="px-4 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={buyNow}>Buy Now</button>
             <button aria-label="wishlist" title="Add to wishlist" onClick={toggleWishlist} className={`px-3 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 ${isWished ? 'bg-rose-50 border-rose-200 text-rose-600' : ''}`}>
               {isWished ? '♥ In Wishlist' : '♡ Wishlist'}
             </button>
