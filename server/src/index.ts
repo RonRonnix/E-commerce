@@ -55,9 +55,17 @@ app.post('/api/paymongo/webhook', express.raw({ type: 'application/json' }), asy
     event?.data?.attributes?.payment_intent_id ||
     event?.data?.attributes?.payment_intent?.id ||
     event?.data?.attributes?.data?.attributes?.payment_intent_id
+  const metadata =
+    event?.data?.attributes?.metadata ||
+    event?.data?.attributes?.data?.attributes?.metadata
+  const paymentId = metadata?.paymentId
 
-  if (intentId && (type === 'payment.paid' || type === 'payment_intent.succeeded')) {
-    const payment = await (prisma as any).payment.findFirst({ where: { reference: String(intentId) } })
+  if (type === 'payment.paid' || type === 'payment_intent.succeeded' || type === 'checkout_session.payment.paid') {
+    const payment = paymentId
+      ? await (prisma as any).payment.findUnique({ where: { id: String(paymentId) } })
+      : intentId
+        ? await (prisma as any).payment.findFirst({ where: { reference: String(intentId) } })
+        : null
     if (payment) {
       await (prisma as any).payment.update({ where: { id: payment.id }, data: { status: 'paid' } })
       await (prisma as any).order.update({ where: { id: payment.orderId }, data: { status: 'paid' } })
@@ -691,20 +699,15 @@ app.post('/api/payments/:id/paymongo', requireAuth, asyncHandler(async (req: Req
   if (!PAYMONGO_SECRET_KEY) return res.status(500).json({ error: 'PayMongo secret missing' })
   const uid = (req as any).user.id as string
   const schema = z.object({
-    method: z.enum(['card', 'gcash', 'paymaya']),
     email: z.string().email(),
-    card: z.object({
-      number: z.string().min(12).max(19),
-      expMonth: z.number().int().min(1).max(12),
-      expYear: z.number().int().min(2024).max(2100),
-      cvc: z.string().min(3).max(4),
-      name: z.string().min(2),
-    }).optional(),
   })
   const parsed = schema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
 
-  const payment = await (prisma as any).payment.findUnique({ where: { id: req.params.id }, include: { order: true } })
+  const payment = await (prisma as any).payment.findUnique({
+    where: { id: req.params.id },
+    include: { order: { include: { items: true } } },
+  })
   if (!payment || payment.order?.userId !== uid) return res.status(404).json({ error: 'Not found' })
 
   if (payment.status === 'paid') return res.json({ status: 'paid' })
@@ -712,90 +715,43 @@ app.post('/api/payments/:id/paymongo', requireAuth, asyncHandler(async (req: Req
   const auth = Buffer.from(`${PAYMONGO_SECRET_KEY}:`).toString('base64')
   const headers = { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' }
 
-  const createIntent = async () => {
-    const intentRes = await fetch('https://api.paymongo.com/v1/payment_intents', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        data: {
-          attributes: {
-            amount: Number(payment.amountCents),
-            currency: 'PHP',
-            payment_method_allowed: ['card', 'gcash', 'paymaya'],
-            capture_type: 'automatic',
-            description: `Order ${payment.orderId}`,
-            metadata: { orderId: payment.orderId },
-          },
-        },
-      }),
-    })
-    const intentJson: any = await intentRes.json()
-    if (!intentRes.ok) return { ok: false, json: intentJson }
-    return { ok: true, id: intentJson.data.id }
-  }
+  const lineItems = (payment.order?.items || []).map((item: any) => ({
+    name: item.title,
+    amount: Number(item.priceCents),
+    currency: 'PHP',
+    quantity: Number(item.quantity),
+  }))
 
-  const attachIntent = async (id: string) => {
-    const attachRes = await fetch(`https://api.paymongo.com/v1/payment_intents/${id}/attach`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        data: { attributes: { payment_method: paymentMethodId, return_url: `${WEB_ORIGIN}/payment/${payment.id}` } },
-      }),
-    })
-    const attachJson: any = await attachRes.json()
-    return { ok: attachRes.ok, json: attachJson }
-  }
-
-  let intentId = payment.reference
-  const hadReference = Boolean(intentId)
-  if (!intentId) {
-    const created = await createIntent()
-    if (!created.ok) return res.status(400).json({ error: created.json })
-    intentId = created.id
-    await (prisma as any).payment.update({ where: { id: payment.id }, data: { reference: intentId, provider: 'paymongo' } })
-  }
-
-  const method = parsed.data.method
-  const methodBody: any = { type: method, billing: { name: parsed.data.card?.name || payment.order?.fullName, email: parsed.data.email } }
-  if (method === 'card') {
-    if (!parsed.data.card) return res.status(400).json({ error: 'Card details required' })
-    methodBody.details = {
-      card_number: parsed.data.card.number,
-      exp_month: parsed.data.card.expMonth,
-      exp_year: parsed.data.card.expYear,
-      cvc: parsed.data.card.cvc,
-    }
-  }
-
-  const methodRes = await fetch('https://api.paymongo.com/v1/payment_methods', {
+  const sessionRes = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ data: { attributes: methodBody } }),
+    body: JSON.stringify({
+      data: {
+        attributes: {
+          line_items: lineItems,
+          payment_method_types: ['card', 'gcash', 'paymaya'],
+          success_url: `${WEB_ORIGIN}/payment-success`,
+          cancel_url: `${WEB_ORIGIN}/payment/${payment.id}`,
+          description: `Order ${payment.orderId}`,
+          billing: {
+            name: payment.order?.fullName || 'Customer',
+            email: parsed.data.email,
+          },
+          metadata: { orderId: payment.orderId, paymentId: payment.id },
+        },
+      },
+    }),
   })
-  const methodJson: any = await methodRes.json()
-  if (!methodRes.ok) return res.status(400).json({ error: methodJson })
-  const paymentMethodId = methodJson.data.id
+  const sessionJson: any = await sessionRes.json()
+  if (!sessionRes.ok) return res.status(400).json({ error: sessionJson })
 
-  let attach = await attachIntent(intentId)
-  if (!attach.ok && hadReference && attach.json?.errors?.[0]?.code === 'resource_not_found') {
-    await (prisma as any).payment.update({ where: { id: payment.id }, data: { reference: null } })
-    const created = await createIntent()
-    if (!created.ok) return res.status(400).json({ error: created.json })
-    intentId = created.id
+  const intentId = sessionJson.data?.attributes?.payment_intent?.id
+  if (intentId) {
     await (prisma as any).payment.update({ where: { id: payment.id }, data: { reference: intentId, provider: 'paymongo' } })
-    attach = await attachIntent(intentId)
-  }
-  if (!attach.ok) return res.status(400).json({ error: attach.json })
-
-  const status = attach.json.data?.attributes?.status
-  const redirectUrl = attach.json.data?.attributes?.next_action?.redirect?.url
-
-  if (status === 'succeeded') {
-    await (prisma as any).payment.update({ where: { id: payment.id }, data: { status: 'paid' } })
-    await (prisma as any).order.update({ where: { id: payment.orderId }, data: { status: 'paid' } })
   }
 
-  res.json({ status, redirectUrl })
+  const redirectUrl = sessionJson.data?.attributes?.checkout_url
+  res.json({ redirectUrl })
 }))
 
 // Get order details

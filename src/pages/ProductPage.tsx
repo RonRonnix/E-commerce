@@ -172,18 +172,6 @@ export default function ProductPage() {
       return
     }
     if (!product) return
-    const r = await fetch('/api/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ productId: product.id, quantity: qty }),
-    })
-    if (!r.ok) {
-      const msg = await getErrorMessage(r, 'Failed to add to cart')
-      show(msg)
-      return
-    }
-    await refresh()
     navigate(`/checkout?productId=${product.id}&qty=${qty}`)
   }
 
