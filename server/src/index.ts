@@ -18,6 +18,7 @@ const app = express()
 const WEB_ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173'
 const PAYMONGO_SECRET_KEY = process.env.PAYMONGO_SECRET_KEY
 const PAYMONGO_WEBHOOK_SECRET = process.env.PAYMONGO_WEBHOOK_SECRET
+const PAYMONGO_SKIP_WEBHOOK_SIGNATURE = process.env.PAYMONGO_SKIP_WEBHOOK_SIGNATURE === 'true'
 const allowedOrigins = WEB_ORIGIN.split(',').map(o => o.trim()).filter(Boolean)
 app.use(cors({
   origin: (origin, cb) => {
@@ -42,23 +43,35 @@ app.post('/api/paymongo/webhook', express.raw({ type: 'application/json' }), asy
   const parts = signature.split(',').map(p => p.trim())
   const timestamp = parts.find(p => p.startsWith('t='))?.slice(2)
   const v1 = parts.find(p => p.startsWith('v1='))?.slice(3) || parts.find(p => p.startsWith('s='))?.slice(2)
-  if (!timestamp || !v1) return res.status(400).json({ error: 'Invalid signature' })
+  if ((!timestamp || !v1) && !PAYMONGO_SKIP_WEBHOOK_SIGNATURE) return res.status(400).json({ error: 'Invalid signature' })
 
   const rawBody = (req as any).body as Buffer
-  const payload = `${timestamp}.${rawBody.toString('utf8')}`
+  const rawText = rawBody.toString('utf8')
+  const payload = `${timestamp}.${rawText}`
   const expected = crypto.createHmac('sha256', PAYMONGO_WEBHOOK_SECRET).update(payload).digest('hex')
-  if (expected !== v1) return res.status(400).json({ error: 'Invalid signature' })
+  const altExpected = crypto.createHmac('sha256', PAYMONGO_WEBHOOK_SECRET).update(rawText).digest('hex')
+  if ((expected !== v1 && altExpected !== v1) && !PAYMONGO_SKIP_WEBHOOK_SIGNATURE) return res.status(400).json({ error: 'Invalid signature' })
 
-  const event = JSON.parse(rawBody.toString('utf8'))
+  const event = JSON.parse(rawText)
   const type = event?.data?.attributes?.type || event?.data?.type || ''
-  const intentId =
+  let intentId =
     event?.data?.attributes?.payment_intent_id ||
     event?.data?.attributes?.payment_intent?.id ||
     event?.data?.attributes?.data?.attributes?.payment_intent_id
+  const paymentIdFromEvent = event?.data?.id
   const metadata =
     event?.data?.attributes?.metadata ||
     event?.data?.attributes?.data?.attributes?.metadata
   const paymentId = metadata?.paymentId
+
+  if (!intentId && type === 'payment.paid' && paymentIdFromEvent && PAYMONGO_SECRET_KEY) {
+    const auth = Buffer.from(`${PAYMONGO_SECRET_KEY}:`).toString('base64')
+    const payRes = await fetch(`https://api.paymongo.com/v1/payments/${paymentIdFromEvent}`, {
+      headers: { Authorization: `Basic ${auth}` },
+    })
+    const payJson: any = await payRes.json().catch(() => null)
+    intentId = payJson?.data?.attributes?.payment_intent_id || intentId
+  }
 
   if (type === 'payment.paid' || type === 'payment_intent.succeeded' || type === 'checkout_session.payment.paid') {
     const payment = paymentId
