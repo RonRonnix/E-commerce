@@ -106,7 +106,7 @@ describe('critical flows', () => {
       .set('X-CSRF-Token', csrf)
       .send({
         voucherCode: '',
-        paymentMethod: 'cod',
+        paymentMethod: 'online',
         address: {
           fullName: 'Test User',
           phone: '09123456789',

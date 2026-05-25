@@ -102,7 +102,7 @@ describe('auth, cart, reviews', () => {
       data: {
         userId,
         status: 'paid',
-        paymentMethod: 'cod',
+        paymentMethod: 'online',
         subtotalCents: BigInt(25000),
         shippingCents: BigInt(0),
         discountCents: BigInt(0),

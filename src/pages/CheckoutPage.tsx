@@ -19,7 +19,7 @@ export default function CheckoutPage() {
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null)
   const [voucherCode, setVoucherCode] = useState('')
   const [summary, setSummary] = useState<{ subtotalCents: number; shippingCents: number; discountCents: number; totalCents: number } | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState<'cod'|'online'>('cod')
+  const paymentMethod: 'online' = 'online'
   const [address, setAddress] = useState({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' })
   const [addressBaseline, setAddressBaseline] = useState({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', region: '', postalCode: '', country: 'PH' })
   const [loading, setLoading] = useState(true)
@@ -359,10 +359,7 @@ export default function CheckoutPage() {
 
         <div className={`rounded-xl border bg-white p-4 ${addressReady ? '' : 'opacity-60'}`}>
           <h2 className="font-semibold mb-3">Payment</h2>
-          <div className="flex items-center gap-6">
-            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={paymentMethod==='cod'} onChange={()=>setPaymentMethod('cod')} disabled={!addressReady} /> Cash on Delivery</label>
-            <label className="flex items-center gap-2 text-sm"><input type="radio" checked={paymentMethod==='online'} onChange={()=>setPaymentMethod('online')} disabled={!addressReady} /> Online Payment</label>
-          </div>
+          <div className="text-sm text-gray-600">Online payment via PayMongo (GCash, Maya, or Card).</div>
           {!addressReady && (
             <div className="text-xs text-gray-500 mt-2">Choose a shipping address first.</div>
           )}
@@ -400,16 +397,16 @@ export default function CheckoutPage() {
   </section>
     <ConfirmDialog
       open={confirmOpen}
-      title={paymentMethod === 'online' ? 'Confirm and pay order?' : 'Confirm order?'}
+      title="Confirm and pay order?"
       message={summary ? `
 Name: ${address.fullName}\n
 Phone: ${address.phone}\n
 Address: ${address.addressLine1}${address.addressLine2 ? ', ' + address.addressLine2 : ''}, ${address.city}, ${address.region}, ${address.postalCode}\n
-Payment: ${paymentMethod.toUpperCase()}\n
+Payment: PAYMONGO\n
 Voucher: ${voucherCode || '—'}\n
 Total: PHP ${(summary.totalCents/100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
 ` : undefined}
-      confirmText={paymentMethod === 'online' ? 'Confirm & Pay' : 'Confirm'}
+      confirmText="Confirm & Pay"
       cancelText="Review"
       onConfirm={() => { setConfirmOpen(false); placeOrder() }}
       onCancel={() => setConfirmOpen(false)}

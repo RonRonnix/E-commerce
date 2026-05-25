@@ -16,6 +16,8 @@ import rateLimit from 'express-rate-limit'
 
 const app = express()
 const WEB_ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173'
+const PAYMONGO_SECRET_KEY = process.env.PAYMONGO_SECRET_KEY
+const PAYMONGO_WEBHOOK_SECRET = process.env.PAYMONGO_WEBHOOK_SECRET
 const allowedOrigins = WEB_ORIGIN.split(',').map(o => o.trim()).filter(Boolean)
 app.use(cors({
   origin: (origin, cb) => {
@@ -26,7 +28,6 @@ app.use(cors({
   credentials: true,
   allowedHeaders: ['Content-Type', 'X-CSRF-Token'],
 }))
-app.use(express.json())
 app.use(cookieParser())
 app.set('json replacer', (_key: string, value: unknown) => (typeof value === 'bigint' ? Number(value) : value))
 app.use((req: Request, res: Response, next) => {
@@ -35,6 +36,37 @@ app.use((req: Request, res: Response, next) => {
   res.setHeader('Referrer-Policy', 'same-origin')
   next()
 })
+app.post('/api/paymongo/webhook', express.raw({ type: 'application/json' }), asyncHandler(async (req: Request, res: Response) => {
+  if (!PAYMONGO_WEBHOOK_SECRET) return res.status(500).json({ error: 'Missing webhook secret' })
+  const signature = String(req.headers['paymongo-signature'] || '')
+  const parts = signature.split(',').map(p => p.trim())
+  const timestamp = parts.find(p => p.startsWith('t='))?.slice(2)
+  const v1 = parts.find(p => p.startsWith('v1='))?.slice(3) || parts.find(p => p.startsWith('s='))?.slice(2)
+  if (!timestamp || !v1) return res.status(400).json({ error: 'Invalid signature' })
+
+  const rawBody = (req as any).body as Buffer
+  const payload = `${timestamp}.${rawBody.toString('utf8')}`
+  const expected = crypto.createHmac('sha256', PAYMONGO_WEBHOOK_SECRET).update(payload).digest('hex')
+  if (expected !== v1) return res.status(400).json({ error: 'Invalid signature' })
+
+  const event = JSON.parse(rawBody.toString('utf8'))
+  const type = event?.data?.attributes?.type || event?.data?.type || ''
+  const intentId =
+    event?.data?.attributes?.payment_intent_id ||
+    event?.data?.attributes?.payment_intent?.id ||
+    event?.data?.attributes?.data?.attributes?.payment_intent_id
+
+  if (intentId && (type === 'payment.paid' || type === 'payment_intent.succeeded')) {
+    const payment = await (prisma as any).payment.findFirst({ where: { reference: String(intentId) } })
+    if (payment) {
+      await (prisma as any).payment.update({ where: { id: payment.id }, data: { status: 'paid' } })
+      await (prisma as any).order.update({ where: { id: payment.orderId }, data: { status: 'paid' } })
+    }
+  }
+
+  res.json({ ok: true })
+}))
+app.use(express.json())
 app.use((req: Request, res: Response, next) => {
   const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(req.method)
   if (!unsafe) return next()
@@ -477,7 +509,7 @@ app.post('/api/checkout', requireAuth, asyncHandler(async (req: Request, res: Re
   const uid = (req as any).user.id as string
   const schema = z.object({
     voucherCode: z.string().trim().optional(),
-    paymentMethod: z.enum(['cod','online']),
+    paymentMethod: z.enum(['online']),
     address: z.object({
       fullName: z.string().min(2),
       phone: z.string().min(5),
@@ -504,7 +536,7 @@ app.post('/api/checkout', requireAuth, asyncHandler(async (req: Request, res: Re
   const order = await prisma.$transaction(async (tx) => {
     const created = await (tx as any).order.create({ data: {
       userId: uid,
-      status: paymentMethod === 'cod' ? 'pending' : 'pending',
+      status: 'pending',
       paymentMethod,
       voucherCode: voucherCode || null,
       subtotalCents: subtotal,
@@ -533,31 +565,117 @@ app.post('/api/checkout', requireAuth, asyncHandler(async (req: Request, res: Re
     // clear cart
     await (tx as any).cartItem.deleteMany({ where: { userId: uid } })
     // payment placeholder for online
-    if (paymentMethod === 'online') {
-      await (tx as any).payment.create({ data: {
-        orderId: created.id,
-        method: 'online',
-        status: 'pending',
-        amountCents: total,
-      } })
-    }
+    await (tx as any).payment.create({ data: {
+      orderId: created.id,
+      method: 'online',
+      status: 'pending',
+      provider: 'paymongo',
+      amountCents: total,
+    } })
     return created
   })
 
   const result: any = { orderId: (order as any).id }
-  if (paymentMethod === 'online') {
-    const payment = await (prisma as any).payment.findUnique({ where: { orderId: (order as any).id } })
-    result.paymentId = payment?.id
-  }
+  const payment = await (prisma as any).payment.findUnique({ where: { orderId: (order as any).id } })
+  result.paymentId = payment?.id
   res.status(201).json(result)
 }))
 
-// Mark payment as paid (simulation of local bank/online payment)
-app.post('/api/payments/:id/mark-paid', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const payment = await (prisma as any).payment.update({ where: { id: req.params.id }, data: { status: 'paid' } })
-  // cascade: set order status to paid
-  await (prisma as any).order.update({ where: { id: payment.orderId }, data: { status: 'paid' } })
-  res.json({ ok: true })
+app.get('/api/payments/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const uid = (req as any).user.id as string
+  const payment = await (prisma as any).payment.findUnique({ where: { id: req.params.id }, include: { order: true } })
+  if (!payment || payment.order?.userId !== uid) return res.status(404).json({ error: 'Not found' })
+  res.json(payment)
+}))
+
+app.post('/api/payments/:id/paymongo', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  if (!PAYMONGO_SECRET_KEY) return res.status(500).json({ error: 'PayMongo secret missing' })
+  const uid = (req as any).user.id as string
+  const schema = z.object({
+    method: z.enum(['card', 'gcash', 'paymaya']),
+    card: z.object({
+      number: z.string().min(12).max(19),
+      expMonth: z.number().int().min(1).max(12),
+      expYear: z.number().int().min(2024).max(2100),
+      cvc: z.string().min(3).max(4),
+      name: z.string().min(2),
+    }).optional(),
+  })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
+  const payment = await (prisma as any).payment.findUnique({ where: { id: req.params.id }, include: { order: true } })
+  if (!payment || payment.order?.userId !== uid) return res.status(404).json({ error: 'Not found' })
+
+  if (payment.status === 'paid') return res.json({ status: 'paid' })
+
+  const auth = Buffer.from(`${PAYMONGO_SECRET_KEY}:`).toString('base64')
+  const headers = { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' }
+
+  let intentId = payment.reference
+  if (!intentId) {
+    const intentRes = await fetch('https://api.paymongo.com/v1/payment_intents', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        data: {
+          attributes: {
+            amount: Number(payment.amountCents),
+            currency: 'PHP',
+            payment_method_allowed: ['card', 'gcash', 'paymaya'],
+            capture_type: 'automatic',
+            description: `Order ${payment.orderId}`,
+            metadata: { orderId: payment.orderId },
+          },
+        },
+      }),
+    })
+    const intentJson = await intentRes.json()
+    if (!intentRes.ok) return res.status(400).json({ error: intentJson })
+    intentId = intentJson.data.id
+    await (prisma as any).payment.update({ where: { id: payment.id }, data: { reference: intentId, provider: 'paymongo' } })
+  }
+
+  const method = parsed.data.method
+  const methodBody: any = { type: method, billing: { name: parsed.data.card?.name || payment.order?.fullName } }
+  if (method === 'card') {
+    if (!parsed.data.card) return res.status(400).json({ error: 'Card details required' })
+    methodBody.details = {
+      card_number: parsed.data.card.number,
+      exp_month: parsed.data.card.expMonth,
+      exp_year: parsed.data.card.expYear,
+      cvc: parsed.data.card.cvc,
+    }
+  }
+
+  const methodRes = await fetch('https://api.paymongo.com/v1/payment_methods', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ data: { attributes: methodBody } }),
+  })
+  const methodJson = await methodRes.json()
+  if (!methodRes.ok) return res.status(400).json({ error: methodJson })
+  const paymentMethodId = methodJson.data.id
+
+  const attachRes = await fetch(`https://api.paymongo.com/v1/payment_intents/${intentId}/attach`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      data: { attributes: { payment_method: paymentMethodId, return_url: `${WEB_ORIGIN}/payment/${payment.id}` } },
+    }),
+  })
+  const attachJson = await attachRes.json()
+  if (!attachRes.ok) return res.status(400).json({ error: attachJson })
+
+  const status = attachJson.data?.attributes?.status
+  const redirectUrl = attachJson.data?.attributes?.next_action?.redirect?.url
+
+  if (status === 'succeeded') {
+    await (prisma as any).payment.update({ where: { id: payment.id }, data: { status: 'paid' } })
+    await (prisma as any).order.update({ where: { id: payment.orderId }, data: { status: 'paid' } })
+  }
+
+  res.json({ status, redirectUrl })
 }))
 
 // Get order details
