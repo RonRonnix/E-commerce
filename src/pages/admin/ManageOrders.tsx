@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { assetUrl, placeholderImg } from '../../lib/media'
 
@@ -30,6 +30,16 @@ export default function ManageOrders() {
   const [refundReason, setRefundReason] = useState('')
   const [refunding, setRefunding] = useState(false)
   const [refundError, setRefundError] = useState<string | null>(null)
+  const refundModalRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!refundConfirmOpen) return
+    const root = refundModalRef.current
+    if (!root) return
+    const focusable = root.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+    const first = focusable[0]
+    first?.focus()
+  }, [refundConfirmOpen])
 
   useEffect(() => {
     setSearchParams((prev) => {
@@ -293,7 +303,7 @@ export default function ManageOrders() {
 
       {refundConfirmOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="refund-title" aria-describedby="refund-desc">
-          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+          <div ref={refundModalRef} className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
             <h3 id="refund-title" className="text-lg font-semibold mb-2">Confirm refund?</h3>
             <p id="refund-desc" className="text-sm text-gray-600 mb-3">This will issue a full refund and mark the order as refunded.</p>
             <label className="text-xs text-gray-600">Reason (optional)</label>

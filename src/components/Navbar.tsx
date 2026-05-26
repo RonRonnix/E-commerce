@@ -16,6 +16,7 @@ export default function Navbar() {
           <NavLink to="/" className={({isActive}: {isActive: boolean}) => isActive ? 'text-black' : ''}>Home</NavLink>
           <NavLink to="/about">About</NavLink>
           <NavLink to="/contact">Contact Us</NavLink>
+          <NavLink to="/privacy">Legal</NavLink>
           {user && (user.roles.includes('admin') || user.roles.includes('owner')) && (
             <NavLink to="/admin">Admin</NavLink>
           )}

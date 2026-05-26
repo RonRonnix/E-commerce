@@ -18,6 +18,7 @@ export default function Footer() {
     { label: 'Frequently asked questions', href: '#' },
     { label: 'Terms of Service', href: '/terms' },
     { label: 'Privacy Policy', href: '/privacy' },
+    { label: 'Data Retention Policy', href: '/data-retention' },
   ]
 
   return (

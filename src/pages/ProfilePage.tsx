@@ -33,6 +33,8 @@ export default function ProfilePage() {
   const [showAuthPassword, setShowAuthPassword] = useState(false)
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
+  const confirmSaveRef = useRef<HTMLDivElement | null>(null)
+  const confirmCancelRef = useRef<HTMLDivElement | null>(null)
   // Orders state
   const [orders, setOrders] = useState<Array<any>>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
@@ -66,6 +68,24 @@ export default function ProfilePage() {
       .finally(() => { if (!cancelled) setOrdersLoading(false) })
     return () => { cancelled = true }
   }, [user?.id])
+
+  useEffect(() => {
+    if (!confirmSaveOpen) return
+    const root = confirmSaveRef.current
+    if (!root) return
+    const focusable = root.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+    const first = focusable[0]
+    first?.focus()
+  }, [confirmSaveOpen])
+
+  useEffect(() => {
+    if (!confirmCancelOpen) return
+    const root = confirmCancelRef.current
+    if (!root) return
+    const focusable = root.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+    const first = focusable[0]
+    first?.focus()
+  }, [confirmCancelOpen])
 
   useEffect(() => {
     if (!user) { setAddresses([]); return }
@@ -468,7 +488,7 @@ export default function ProfilePage() {
 
         {confirmSaveOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-save-title" aria-describedby="confirm-save-desc">
-            <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+            <div ref={confirmSaveRef} className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
               <h3 id="confirm-save-title" className="text-lg font-semibold mb-2">Save changes?</h3>
               <p id="confirm-save-desc" className="text-sm text-gray-600 mb-4">Do you want to save your profile updates?</p>
               <div className="flex justify-end gap-2">
@@ -491,7 +511,7 @@ export default function ProfilePage() {
 
         {confirmCancelOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-cancel-title" aria-describedby="confirm-cancel-desc">
-            <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+            <div ref={confirmCancelRef} className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
               <h3 id="confirm-cancel-title" className="text-lg font-semibold mb-2">Discard changes?</h3>
               <p id="confirm-cancel-desc" className="text-sm text-gray-600 mb-4">Your unsaved edits will be lost.</p>
               <div className="flex justify-end gap-2">
