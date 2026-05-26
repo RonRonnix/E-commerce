@@ -827,17 +827,40 @@ app.post('/api/payments/:id/paymongo', requireAuth, asyncHandler(async (req: Req
 // Admin: full refund via PayMongo
 app.post('/api/admin/payments/:id/refund', requireAuth, requireRole('admin','owner'), asyncHandler(async (req: Request, res: Response) => {
   if (!PAYMONGO_SECRET_KEY) return res.status(500).json({ error: 'PayMongo secret missing' })
-  const schema = z.object({ reason: z.string().trim().min(3).max(200).optional() })
+  const schema = z.object({
+    reason: z.string().trim().min(3).max(200).optional(),
+    reasonNote: z.string().trim().min(3).max(200).optional(),
+  })
   const parsed = schema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
 
   const payment = await (prisma as any).payment.findUnique({ where: { id: req.params.id }, include: { order: true } })
   if (!payment) return res.status(404).json({ error: 'Payment not found' })
   if (payment.status !== 'paid') return res.status(400).json({ error: 'Only paid payments can be refunded' })
-  if (!payment.providerPaymentId) return res.status(400).json({ error: 'Missing PayMongo payment id' })
 
   const auth = Buffer.from(`${PAYMONGO_SECRET_KEY}:`).toString('base64')
   const headers = { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' }
+  let providerPaymentId = payment.providerPaymentId
+  if (!providerPaymentId && payment.reference) {
+    const intentRes = await fetch(`https://api.paymongo.com/v1/payment_intents/${payment.reference}`, { headers })
+    const intentJson: any = await intentRes.json().catch(() => null)
+    const intentAttrs = intentJson?.data?.attributes
+    providerPaymentId =
+      intentAttrs?.last_payment?.id ||
+      (Array.isArray(intentAttrs?.payments) ? intentAttrs.payments[0]?.id : undefined)
+    if (providerPaymentId) {
+      await (prisma as any).payment.update({ where: { id: payment.id }, data: { providerPaymentId } })
+    }
+  }
+  if (!providerPaymentId) return res.status(400).json({ error: 'Missing PayMongo payment id' })
+
+  let refundAmount = Number(payment.amountCents)
+  const pmPayRes = await fetch(`https://api.paymongo.com/v1/payments/${providerPaymentId}`, { headers })
+  const pmPayJson: any = await pmPayRes.json().catch(() => null)
+  const pmAmount = pmPayJson?.data?.attributes?.amount
+  if (typeof pmAmount === 'number' && Number.isFinite(pmAmount)) {
+    refundAmount = pmAmount
+  }
 
   const refundRes = await fetch('https://api.paymongo.com/v1/refunds', {
     method: 'POST',
@@ -845,9 +868,13 @@ app.post('/api/admin/payments/:id/refund', requireAuth, requireRole('admin','own
     body: JSON.stringify({
       data: {
         attributes: {
-          amount: Number(payment.amountCents),
-          payment_id: payment.providerPaymentId,
-          reason: parsed.data.reason || undefined,
+          amount: refundAmount,
+          payment_id: providerPaymentId,
+          reason: (() => {
+            const raw = parsed.data.reason?.trim().toLowerCase()
+            const allowed = new Set(['duplicate', 'fraudulent', 'requested_by_customer'])
+            return raw && allowed.has(raw) ? raw : 'requested_by_customer'
+          })(),
         },
       },
     }),
@@ -864,7 +891,7 @@ app.post('/api/admin/payments/:id/refund', requireAuth, requireRole('admin','own
       providerRefundId: refundId || null,
       amountCents: BigInt(refundAttrs.amount ?? payment.amountCents),
       status: String(refundAttrs.status || 'succeeded'),
-      reason: parsed.data.reason || null,
+      reason: parsed.data.reasonNote || parsed.data.reason || null,
     },
   })
 

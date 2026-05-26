@@ -80,9 +80,31 @@ export default function ManageOrders() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ reason: refundReason.trim() || undefined }),
+        body: JSON.stringify({ reasonNote: refundReason.trim() || undefined }),
       })
-      if (!r.ok) throw new Error('Refund failed')
+      if (!r.ok) {
+        const err = await r.json().catch(() => null)
+        const raw = err?.error
+        const code = raw?.errors?.[0]?.code
+        const detail = raw?.errors?.[0]?.detail
+        let msg = 'Refund failed'
+        if (code === 'available_balance_insufficient') {
+          msg = 'Refund unavailable: PayMongo balance is insufficient. Add funds or wait for settlement.'
+        } else if (code === 'parameter_required' && detail?.includes('reason')) {
+          msg = 'Refund reason is required by PayMongo.'
+        } else if (code === 'parameter_invalid' && detail?.includes('reason')) {
+          msg = 'Refund reason must be one of: duplicate, fraudulent, requested_by_customer.'
+        } else if (code === 'parameter_above_maximum' && detail?.includes('amount')) {
+          msg = 'Refund amount exceeds the available refundable amount.'
+        } else if (typeof raw === 'string') {
+          msg = raw
+        } else if (raw?.message) {
+          msg = String(raw.message)
+        } else if (raw?.fieldErrors) {
+          msg = Object.values(raw.fieldErrors).flat().join(', ')
+        }
+        throw new Error(msg)
+      }
       setDetails((prev: any) => prev ? { ...prev, status: 'refunded', payment: { ...prev.payment, status: 'refunded' } } : prev)
       setOrders((prev) => prev.map((o) => o.id === details.id ? { ...o, status: 'refunded' } : o))
       setRefundConfirmOpen(false)
@@ -273,6 +295,9 @@ export default function ManageOrders() {
               value={refundReason}
               onChange={(e) => setRefundReason(e.target.value)}
             />
+            <div className="mt-2 text-xs text-gray-500">
+              PayMongo refunds require an available balance. If funds are not available, the refund will fail.
+            </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
