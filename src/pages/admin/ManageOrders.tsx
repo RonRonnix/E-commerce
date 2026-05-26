@@ -10,6 +10,7 @@ function Status({ status }: { status: string }) {
     shipped: 'bg-blue-100 text-blue-800',
     delivered: 'bg-emerald-100 text-emerald-800',
     cancelled: 'bg-red-100 text-red-800',
+    refunded: 'bg-purple-100 text-purple-800',
   }
   const cls = map[status] || 'bg-gray-100 text-gray-800'
   return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${cls}`}>{status}</span>
@@ -25,6 +26,10 @@ export default function ManageOrders() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [details, setDetails] = useState<any | null>(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
+  const [refundConfirmOpen, setRefundConfirmOpen] = useState(false)
+  const [refundReason, setRefundReason] = useState('')
+  const [refunding, setRefunding] = useState(false)
+  const [refundError, setRefundError] = useState<string | null>(null)
 
   useEffect(() => {
     setSearchParams((prev) => {
@@ -51,6 +56,7 @@ export default function ManageOrders() {
   async function openDetails(id: string) {
     setDetailsOpen(true)
     setDetailsLoading(true)
+    setRefundError(null)
     try {
       const r = await fetch(`/api/orders/${id}`, { credentials: 'include' })
       if (!r.ok) throw new Error('Failed to load order details')
@@ -60,6 +66,31 @@ export default function ManageOrders() {
       setDetails({ error: e?.message || 'Failed to load order details' })
     } finally {
       setDetailsLoading(false)
+    }
+  }
+
+  const canRefund = Boolean(details?.payment?.status === 'paid' && details?.status !== 'refunded')
+
+  async function submitRefund() {
+    if (!details?.payment?.id) return
+    setRefunding(true)
+    setRefundError(null)
+    try {
+      const r = await fetch(`/api/admin/payments/${details.payment.id}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ reason: refundReason.trim() || undefined }),
+      })
+      if (!r.ok) throw new Error('Refund failed')
+      setDetails((prev: any) => prev ? { ...prev, status: 'refunded', payment: { ...prev.payment, status: 'refunded' } } : prev)
+      setOrders((prev) => prev.map((o) => o.id === details.id ? { ...o, status: 'refunded' } : o))
+      setRefundConfirmOpen(false)
+      setRefundReason('')
+    } catch (e: any) {
+      setRefundError(e?.message || 'Refund failed')
+    } finally {
+      setRefunding(false)
     }
   }
 
@@ -212,8 +243,53 @@ export default function ManageOrders() {
                       <div className="mt-1 font-semibold">₱{(details.totalCents/100).toFixed(2)}</div>
                     </div>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded-md border text-sm disabled:opacity-60"
+                      disabled={!canRefund || refunding}
+                      onClick={() => setRefundConfirmOpen(true)}
+                    >
+                      Issue refund
+                    </button>
+                    {refundError && <div className="text-sm text-red-600">{refundError}</div>}
+                  </div>
                 </>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {refundConfirmOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+            <h3 className="text-lg font-semibold mb-2">Confirm refund?</h3>
+            <p className="text-sm text-gray-600 mb-3">This will issue a full refund and mark the order as refunded.</p>
+            <label className="text-xs text-gray-600">Reason (optional)</label>
+            <input
+              className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+              placeholder="Customer reported a defect"
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="px-3 py-2 rounded-md border text-sm"
+                onClick={() => { setRefundConfirmOpen(false); setRefundReason('') }}
+                disabled={refunding}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-3 py-2 rounded-md bg-black text-white text-sm disabled:opacity-60"
+                onClick={submitRefund}
+                disabled={refunding}
+              >
+                {refunding ? 'Refunding…' : 'Confirm refund'}
+              </button>
             </div>
           </div>
         </div>

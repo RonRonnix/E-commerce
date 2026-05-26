@@ -129,7 +129,7 @@ model Address {
 model Order {
   id            String       @id @default(cuid())
   userId        String
-  status        String       @default("pending") // pending, paid, cancelled, shipped
+  status        String       @default("pending") // pending, paid, shipped, delivered, cancelled, refunded
   paymentMethod String                      // 'cod' | 'online'
   voucherCode   String?
   subtotalCents BigInt
@@ -172,11 +172,28 @@ model Payment {
   status       String   @default("pending") // pending, paid, failed
   provider     String?            // bank name or gateway
   reference    String?            // transaction id
+  providerPaymentId String?        // PayMongo payment id (pay_...)
   amountCents  BigInt
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refunds Refund[]
+}
+
+model Refund {
+  id               String   @id @default(cuid())
+  paymentId        String
+  providerRefundId String?  @unique
+  amountCents      BigInt
+  status           String
+  reason           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId, status])
 }
 
 model Review {

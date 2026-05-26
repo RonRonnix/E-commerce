@@ -100,8 +100,45 @@ app.post('/api/paymongo/webhook', express.raw({ type: 'application/json' }), asy
         ? await (prisma as any).payment.findFirst({ where: { reference: String(intentId) } })
         : null
     if (payment) {
-      await (prisma as any).payment.update({ where: { id: payment.id }, data: { status: 'paid' } })
+      const providerPaymentId = paymentIdFromEvent && String(paymentIdFromEvent).startsWith('pay_')
+        ? String(paymentIdFromEvent)
+        : undefined
+      await (prisma as any).payment.update({ where: { id: payment.id }, data: { status: 'paid', ...(providerPaymentId ? { providerPaymentId } : {}) } })
       await (prisma as any).order.update({ where: { id: payment.orderId }, data: { status: 'paid' } })
+    }
+  }
+
+  if (type.startsWith('refund.')) {
+    const refundData = event?.data
+    const refundId = refundData?.id ? String(refundData.id) : undefined
+    const refundAttrs = refundData?.attributes || {}
+    const refundPaymentId = refundAttrs?.payment_id
+    const refundAmount = refundAttrs?.amount
+    const refundStatus = refundAttrs?.status
+    const refundReason = refundAttrs?.reason
+    if (refundId && refundPaymentId && refundAmount && refundStatus) {
+      const payment = await (prisma as any).payment.findFirst({ where: { providerPaymentId: String(refundPaymentId) } })
+      if (payment) {
+        await (prisma as any).refund.upsert({
+          where: { providerRefundId: refundId },
+          create: {
+            providerRefundId: refundId,
+            paymentId: payment.id,
+            amountCents: BigInt(refundAmount),
+            status: String(refundStatus),
+            reason: refundReason ? String(refundReason) : null,
+          },
+          update: {
+            status: String(refundStatus),
+            amountCents: BigInt(refundAmount),
+            reason: refundReason ? String(refundReason) : null,
+          },
+        })
+        if (String(refundStatus).toLowerCase() === 'succeeded') {
+          await (prisma as any).payment.update({ where: { id: payment.id }, data: { status: 'refunded' } })
+          await (prisma as any).order.update({ where: { id: payment.orderId }, data: { status: 'refunded' } })
+        }
+      }
     }
   }
 
@@ -787,6 +824,56 @@ app.post('/api/payments/:id/paymongo', requireAuth, asyncHandler(async (req: Req
   res.json({ redirectUrl })
 }))
 
+// Admin: full refund via PayMongo
+app.post('/api/admin/payments/:id/refund', requireAuth, requireRole('admin','owner'), asyncHandler(async (req: Request, res: Response) => {
+  if (!PAYMONGO_SECRET_KEY) return res.status(500).json({ error: 'PayMongo secret missing' })
+  const schema = z.object({ reason: z.string().trim().min(3).max(200).optional() })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
+  const payment = await (prisma as any).payment.findUnique({ where: { id: req.params.id }, include: { order: true } })
+  if (!payment) return res.status(404).json({ error: 'Payment not found' })
+  if (payment.status !== 'paid') return res.status(400).json({ error: 'Only paid payments can be refunded' })
+  if (!payment.providerPaymentId) return res.status(400).json({ error: 'Missing PayMongo payment id' })
+
+  const auth = Buffer.from(`${PAYMONGO_SECRET_KEY}:`).toString('base64')
+  const headers = { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' }
+
+  const refundRes = await fetch('https://api.paymongo.com/v1/refunds', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      data: {
+        attributes: {
+          amount: Number(payment.amountCents),
+          payment_id: payment.providerPaymentId,
+          reason: parsed.data.reason || undefined,
+        },
+      },
+    }),
+  })
+  
+  const refundJson: any = await refundRes.json()
+  if (!refundRes.ok) return res.status(400).json({ error: refundJson })
+
+  const refundId = refundJson?.data?.id
+  const refundAttrs = refundJson?.data?.attributes || {}
+  await (prisma as any).refund.create({
+    data: {
+      paymentId: payment.id,
+      providerRefundId: refundId || null,
+      amountCents: BigInt(refundAttrs.amount ?? payment.amountCents),
+      status: String(refundAttrs.status || 'succeeded'),
+      reason: parsed.data.reason || null,
+    },
+  })
+
+  await (prisma as any).payment.update({ where: { id: payment.id }, data: { status: 'refunded' } })
+  await (prisma as any).order.update({ where: { id: payment.orderId }, data: { status: 'refunded' } })
+
+  res.json({ ok: true, refund: refundJson?.data || null })
+}))
+
 // Get order details
 app.get('/api/orders/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const order = await (prisma as any).order.findUnique({ where: { id: req.params.id }, include: { items: true, payment: true } })
@@ -831,7 +918,7 @@ app.get('/api/admin/orders', requireAuth, requireRole('admin','owner'), asyncHan
   const limit = Math.min(100, Math.max(1, Number(q.limit ?? 10)))
   const userId = q.userId ? String(q.userId) : undefined
   const statusRaw = q.status ? String(q.status).toLowerCase() : undefined
-  const allowedStatuses = new Set(['pending','paid','shipped','delivered','cancelled'])
+  const allowedStatuses = new Set(['pending','paid','shipped','delivered','cancelled','refunded'])
   const status = statusRaw && allowedStatuses.has(statusRaw) ? statusRaw : undefined
   const where: any = {}
   if (userId) where.userId = userId
