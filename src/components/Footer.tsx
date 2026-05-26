@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function Footer() {
   const services = [
     'Bonus program',
@@ -9,12 +11,13 @@ export default function Footer() {
   ]
 
   const assistance = [
-    'Find an order',
-    'Terms of delivery',
-    'Exchange and return of goods',
-    'Guarantee',
-    'Frequently asked questions',
-    'Terms of use of the site',
+    { label: 'Find an order', href: '#' },
+    { label: 'Terms of delivery', href: '#' },
+    { label: 'Exchange and return of goods', href: '#' },
+    { label: 'Guarantee', href: '#' },
+    { label: 'Frequently asked questions', href: '#' },
+    { label: 'Terms of Service', href: '/terms' },
+    { label: 'Privacy Policy', href: '/privacy' },
   ]
 
   return (
@@ -49,7 +52,13 @@ export default function Footer() {
           <h3 className="font-semibold">Assistance to the buyer</h3>
           <ul className="mt-4 space-y-3 text-sm text-gray-300">
             {assistance.map((s) => (
-              <li key={s}><a className="hover:text-white" href="#">{s}</a></li>
+              <li key={s.label}>
+                {s.href.startsWith('/') ? (
+                  <Link className="hover:text-white" to={s.href}>{s.label}</Link>
+                ) : (
+                  <a className="hover:text-white" href={s.href}>{s.label}</a>
+                )}
+              </li>
             ))}
           </ul>
         </div>

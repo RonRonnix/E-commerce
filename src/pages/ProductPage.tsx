@@ -280,13 +280,38 @@ export default function ProductPage() {
           <p className="mt-4 text-gray-600 whitespace-pre-wrap">{product.description || 'No description provided.'}</p>
           <div className="mt-6 flex gap-3">
             <div className="flex items-center gap-2">
-              <button className="px-2 py-1 border rounded cursor-pointer transition-transform duration-150 hover:scale-[1.06] active:scale-95" onClick={() => setQty(q => Math.max(1, q - 1))}>-</button>
-              <input className="w-12 text-center border rounded py-1" value={qty} onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))} />
-              <button className="px-2 py-1 border rounded cursor-pointer transition-transform duration-150 hover:scale-[1.06] active:scale-95" onClick={() => setQty(q => q + 1)}>+</button>
+              <button
+                className="px-2 py-1 border rounded cursor-pointer transition-transform duration-150 hover:scale-[1.06] active:scale-95"
+                onClick={() => setQty(q => Math.max(1, q - 1))}
+                aria-label="Decrease quantity"
+              >
+                -
+              </button>
+              <input
+                className="w-12 text-center border rounded py-1"
+                type="number"
+                min={1}
+                aria-label="Quantity"
+                value={qty}
+                onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))}
+              />
+              <button
+                className="px-2 py-1 border rounded cursor-pointer transition-transform duration-150 hover:scale-[1.06] active:scale-95"
+                onClick={() => setQty(q => q + 1)}
+                aria-label="Increase quantity"
+              >
+                +
+              </button>
             </div>
             <button className="px-4 py-2 rounded-md bg-black text-white cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={addToCart}>Add to Cart</button>
             <button className="px-4 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={buyNow}>Buy Now</button>
-            <button aria-label="wishlist" title="Add to wishlist" onClick={toggleWishlist} className={`px-3 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 ${isWished ? 'bg-rose-50 border-rose-200 text-rose-600' : ''}`}>
+            <button
+              aria-label={isWished ? 'Remove from wishlist' : 'Add to wishlist'}
+              aria-pressed={!!isWished}
+              title={isWished ? 'Remove from wishlist' : 'Add to wishlist'}
+              onClick={toggleWishlist}
+              className={`px-3 py-2 rounded-md border cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 ${isWished ? 'bg-rose-50 border-rose-200 text-rose-600' : ''}`}
+            >
               {isWished ? '♥ In Wishlist' : '♡ Wishlist'}
             </button>
           </div>
@@ -320,6 +345,7 @@ export default function ProductPage() {
               onChange={e => setReviewComment(e.target.value)}
               rows={4}
               placeholder="Share your experience"
+              aria-label="Review comment"
               className="w-full border rounded-md px-3 py-2 text-sm"
             />
             {reviewError && <div className="text-sm text-red-600">{reviewError}</div>}
@@ -352,9 +378,13 @@ export default function ProductPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {r.user.avatarUrl ? (
-                      <img src={r.user.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                      <img
+                        src={r.user.avatarUrl}
+                        alt={`${r.user.fullName || r.user.username || 'Customer'} avatar`}
+                        className="h-8 w-8 rounded-full object-cover"
+                      />
                     ) : (
-                      <div className="h-8 w-8 rounded-full bg-gray-100" />
+                      <div className="h-8 w-8 rounded-full bg-gray-100" aria-hidden="true" />
                     )}
                     <div>
                       <div className="text-sm font-medium">{r.user.fullName || r.user.username || 'Customer'}</div>

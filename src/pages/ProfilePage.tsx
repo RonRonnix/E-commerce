@@ -294,27 +294,27 @@ export default function ProfilePage() {
               <button type="button" className="text-sm text-gray-600 hover:underline cursor-pointer" onClick={() => setShowSettings(false)}>Close</button>
             </div>
             <div className="mt-4 grid sm:grid-cols-2 gap-3">
-              <button type="button" onClick={() => setSettingsSection('account')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 ${settingsSection === 'account' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('account')} aria-pressed={settingsSection === 'account'} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 ${settingsSection === 'account' ? 'border-black' : ''}`}>
                 <div className="font-medium">Account Details</div>
                 <div className="text-xs text-gray-600">Profile info, email, password</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('addresses')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'addresses' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('addresses')} aria-pressed={settingsSection === 'addresses'} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'addresses' ? 'border-black' : ''}`}>
                 <div className="font-medium">Saved Addresses</div>
                 <div className="text-xs text-gray-600">Shipping and billing addresses</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('payments')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'payments' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('payments')} aria-pressed={settingsSection === 'payments'} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'payments' ? 'border-black' : ''}`}>
                 <div className="font-medium">Bank Accounts / Cards</div>
                 <div className="text-xs text-gray-600">Payment methods and billing</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('notifications')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'notifications' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('notifications')} aria-pressed={settingsSection === 'notifications'} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'notifications' ? 'border-black' : ''}`}>
                 <div className="font-medium">Notification Settings</div>
                 <div className="text-xs text-gray-600">Order and marketing alerts</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('privacy')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'privacy' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('privacy')} aria-pressed={settingsSection === 'privacy'} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'privacy' ? 'border-black' : ''}`}>
                 <div className="font-medium">Privacy Settings</div>
                 <div className="text-xs text-gray-600">Profile visibility and data</div>
               </button>
-              <button type="button" onClick={() => setSettingsSection('security')} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'security' ? 'border-black' : ''}`}>
+              <button type="button" onClick={() => setSettingsSection('security')} aria-pressed={settingsSection === 'security'} className={`rounded-lg border p-3 text-left hover:bg-gray-50 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95${settingsSection === 'security' ? 'border-black' : ''}`}>
                 <div className="font-medium">Security</div>
                 <div className="text-xs text-gray-600">Two-factor and login activity</div>
               </button>
@@ -435,14 +435,14 @@ export default function ProfilePage() {
 
                 {showAddressForm && (
                   <div className="mt-4 grid sm:grid-cols-2 gap-3">
-                    <input className="border rounded-md px-3 py-2" placeholder="Full name" value={addressForm.fullName} onChange={e=>setAddressForm({...addressForm, fullName: e.target.value})} />
-                    <input className="border rounded-md px-3 py-2" placeholder="Phone" value={addressForm.phone} onChange={e=>setAddressForm({...addressForm, phone: e.target.value})} />
-                    <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 1" value={addressForm.addressLine1} onChange={e=>setAddressForm({...addressForm, addressLine1: e.target.value})} />
-                    <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 2 (optional)" value={addressForm.addressLine2} onChange={e=>setAddressForm({...addressForm, addressLine2: e.target.value})} />
-                    <input className="border rounded-md px-3 py-2" placeholder="City" value={addressForm.city} onChange={e=>setAddressForm({...addressForm, city: e.target.value})} />
-                    <input className="border rounded-md px-3 py-2" placeholder="Region/Province" value={addressForm.region} onChange={e=>setAddressForm({...addressForm, region: e.target.value})} />
-                    <input className="border rounded-md px-3 py-2" placeholder="Postal code" value={addressForm.postalCode} onChange={e=>setAddressForm({...addressForm, postalCode: e.target.value})} />
-                    <input className="border rounded-md px-3 py-2" placeholder="Country" value={addressForm.country} onChange={e=>setAddressForm({...addressForm, country: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="Full name" aria-label="Full name" value={addressForm.fullName} onChange={e=>setAddressForm({...addressForm, fullName: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="Phone" aria-label="Phone" value={addressForm.phone} onChange={e=>setAddressForm({...addressForm, phone: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 1" aria-label="Address line 1" value={addressForm.addressLine1} onChange={e=>setAddressForm({...addressForm, addressLine1: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2 sm:col-span-2" placeholder="Address line 2 (optional)" aria-label="Address line 2" value={addressForm.addressLine2} onChange={e=>setAddressForm({...addressForm, addressLine2: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="City" aria-label="City" value={addressForm.city} onChange={e=>setAddressForm({...addressForm, city: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="Region/Province" aria-label="Region" value={addressForm.region} onChange={e=>setAddressForm({...addressForm, region: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="Postal code" aria-label="Postal code" value={addressForm.postalCode} onChange={e=>setAddressForm({...addressForm, postalCode: e.target.value})} />
+                    <input className="border rounded-md px-3 py-2" placeholder="Country" aria-label="Country" value={addressForm.country} onChange={e=>setAddressForm({...addressForm, country: e.target.value})} />
                     <div className="sm:col-span-2 flex items-center gap-3">
                       <button
                         type="button"
@@ -467,10 +467,10 @@ export default function ProfilePage() {
         )}
 
         {confirmSaveOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-save-title" aria-describedby="confirm-save-desc">
             <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
-              <h3 className="text-lg font-semibold mb-2">Save changes?</h3>
-              <p className="text-sm text-gray-600 mb-4">Do you want to save your profile updates?</p>
+              <h3 id="confirm-save-title" className="text-lg font-semibold mb-2">Save changes?</h3>
+              <p id="confirm-save-desc" className="text-sm text-gray-600 mb-4">Do you want to save your profile updates?</p>
               <div className="flex justify-end gap-2">
                 <button type="button" className="px-3 py-2 rounded-md border disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" onClick={() => setConfirmSaveOpen(false)} disabled={saving}>Cancel</button>
                 <button
@@ -490,10 +490,10 @@ export default function ProfilePage() {
         )}
 
         {confirmCancelOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-cancel-title" aria-describedby="confirm-cancel-desc">
             <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
-              <h3 className="text-lg font-semibold mb-2">Discard changes?</h3>
-              <p className="text-sm text-gray-600 mb-4">Your unsaved edits will be lost.</p>
+              <h3 id="confirm-cancel-title" className="text-lg font-semibold mb-2">Discard changes?</h3>
+              <p id="confirm-cancel-desc" className="text-sm text-gray-600 mb-4">Your unsaved edits will be lost.</p>
               <div className="flex justify-end gap-2">
                 <button type="button" className="px-3 py-2 rounded-md border disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:hover:scale-100 disabled:active:scale-100" onClick={() => setConfirmCancelOpen(false)}>Keep editing</button>
                 <button
@@ -544,7 +544,7 @@ export default function ProfilePage() {
             <div className="flex flex-col items-center gap-3">
               <div className="h-28 w-28 rounded-full overflow-hidden bg-gray-100 border">
                 {user.avatarUrl ? (
-                  <img src={user.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
+                  <img src={user.avatarUrl} alt="User avatar" className="h-full w-full object-cover" />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center text-gray-400">No image</div>
                 )}
@@ -566,9 +566,9 @@ export default function ProfilePage() {
             <div className="flex flex-col items-center gap-3">
               <div className="h-28 w-28 rounded-full overflow-hidden bg-gray-100 border">
                 {avatarPreview ? (
-                  <img src={avatarPreview} alt="avatar preview" className="h-full w-full object-cover" />
+                  <img src={avatarPreview} alt="Avatar preview" className="h-full w-full object-cover" />
                 ) : user.avatarUrl ? (
-                  <img src={user.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
+                  <img src={user.avatarUrl} alt="User avatar" className="h-full w-full object-cover" />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center text-gray-400">No image</div>
                 )}
@@ -631,7 +631,7 @@ export default function ProfilePage() {
                     {o.items.map((it: any) => (
                       <a key={it.id} href={`/products/${it.productId}`} className="flex-shrink-0 w-20">
                         <div className="w-20 h-20 rounded-md overflow-hidden bg-gray-100">
-                          <img src={(it.product?.imageUrl) ?? `https://picsum.photos/seed/${it.productId}/160/160`} alt={it.title} className="w-full h-full object-cover" />
+                          <img src={(it.product?.imageUrl) ?? `https://picsum.photos/seed/${it.productId}/160/160`} alt={it.title || 'Product image'} className="w-full h-full object-cover" />
                         </div>
                         <div className="text-[11px] mt-1 line-clamp-2">x{it.quantity} {it.title}</div>
                       </a>
@@ -656,16 +656,51 @@ export default function ProfilePage() {
   return (
     <div className="container-xl py-10 max-w-lg">
       <div className="flex gap-4 mb-6">
-        <button className={`px-3 py-1.5 rounded-md border cursor-pointer ${mode==='login'?'bg-black text-white':''}`} onClick={() => setMode('login')}>Login</button>
-        <button className={`px-3 py-1.5 rounded-md border cursor-pointer ${mode==='register'?'bg-black text-white':''}`} onClick={() => setMode('register')}>Register</button>
+        <button
+          className={`px-3 py-1.5 rounded-md border cursor-pointer ${mode==='login'?'bg-black text-white':''}`}
+          onClick={() => setMode('login')}
+          aria-pressed={mode === 'login'}
+        >
+          Login
+        </button>
+        <button
+          className={`px-3 py-1.5 rounded-md border cursor-pointer ${mode==='register'?'bg-black text-white':''}`}
+          onClick={() => setMode('register')}
+          aria-pressed={mode === 'register'}
+        >
+          Register
+        </button>
       </div>
       <form onSubmit={onAuthSubmit} className="space-y-4">
         {mode === 'register' && (
-          <input value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="Full name" className="w-full border rounded-md px-3 py-2" required />
+          <input
+            value={fullName}
+            onChange={e=>setFullName(e.target.value)}
+            placeholder="Full name"
+            aria-label="Full name"
+            className="w-full border rounded-md px-3 py-2"
+            required
+          />
         )}
-        <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="Email" className="w-full border rounded-md px-3 py-2" required />
+        <input
+          value={email}
+          onChange={e=>setEmail(e.target.value)}
+          type="email"
+          placeholder="Email"
+          aria-label="Email"
+          className="w-full border rounded-md px-3 py-2"
+          required
+        />
         <div className="flex items-center gap-2">
-          <input value={password} onChange={e=>setPassword(e.target.value)} type={showAuthPassword ? 'text' : 'password'} placeholder="Password" className="w-full border rounded-md px-3 py-2" required />
+          <input
+            value={password}
+            onChange={e=>setPassword(e.target.value)}
+            type={showAuthPassword ? 'text' : 'password'}
+            placeholder="Password"
+            aria-label="Password"
+            className="w-full border rounded-md px-3 py-2"
+            required
+          />
           <button type="button" className="p-2 border rounded-md" onClick={() => setShowAuthPassword(v => !v)} aria-label="Toggle password visibility">
             <Eye open={showAuthPassword} />
           </button>

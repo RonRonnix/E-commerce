@@ -25,6 +25,8 @@ import OrderDetailsPage from './pages/OrderDetailsPage'
 import Orders from './pages/admin/Orders'
 import UserOrders from './pages/admin/UserOrders'
 import ManageOrders from './pages/admin/ManageOrders'
+import TermsPage from './pages/TermsPage'
+import PrivacyPage from './pages/PrivacyPage'
 
 export default function App() {
   return (
@@ -49,6 +51,8 @@ export default function App() {
               <Route path="/payment-success" element={<PaymentSuccessPage />} />
               <Route path="/orders/:id" element={<OrderDetailsPage />} />
               <Route path="/wishlist" element={<WishlistPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
               <Route
                 path="/admin/*"
                 element={

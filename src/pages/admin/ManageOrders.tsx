@@ -163,6 +163,14 @@ export default function ManageOrders() {
                   key={o.id}
                   className="border-t hover:bg-gray-50 cursor-pointer"
                   onClick={() => openDetails(o.id)}
+                  tabIndex={0}
+                  role="button"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      openDetails(o.id)
+                    }
+                  }}
                 >
                   <td className="px-4 py-2 align-top">
                     <div className="font-medium">#{o.id.slice(0,8)}</div>
@@ -190,11 +198,11 @@ export default function ManageOrders() {
 
       {/* Details drawer/modal */}
       {detailsOpen && (
-        <div className="fixed inset-0 z-50">
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby="order-details-title">
           <div className="absolute inset-0 bg-black/30" onClick={() => { setDetailsOpen(false); setDetails(null) }} />
           <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-xl border-l animate-[slideIn_.2s_ease-out]">
             <div className="flex items-center justify-between px-4 py-3 border-b">
-              <div className="font-medium">Order Details</div>
+              <div id="order-details-title" className="font-medium">Order Details</div>
               <button className="px-2 py-1 rounded-md border text-xs" onClick={() => { setDetailsOpen(false); setDetails(null) }}>Close</button>
             </div>
             <div className="p-4 space-y-4 overflow-y-auto h-[calc(100%-52px)]">
@@ -236,7 +244,7 @@ export default function ManageOrders() {
                         return (
                           <div key={it.id} className="flex items-center gap-3">
                             <div className="size-12 rounded bg-gray-200 overflow-hidden">
-                              <img src={src} alt="" className="w-full h-full object-cover"/>
+                              <img src={src} alt={it.title || it.product?.title || 'Order item'} className="w-full h-full object-cover"/>
                             </div>
                             <div className="min-w-0">
                               <div className="text-sm line-clamp-1">{it.title || it.product?.title || '—'}</div>
@@ -284,14 +292,15 @@ export default function ManageOrders() {
       )}
 
       {refundConfirmOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="refund-title" aria-describedby="refund-desc">
           <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
-            <h3 className="text-lg font-semibold mb-2">Confirm refund?</h3>
-            <p className="text-sm text-gray-600 mb-3">This will issue a full refund and mark the order as refunded.</p>
+            <h3 id="refund-title" className="text-lg font-semibold mb-2">Confirm refund?</h3>
+            <p id="refund-desc" className="text-sm text-gray-600 mb-3">This will issue a full refund and mark the order as refunded.</p>
             <label className="text-xs text-gray-600">Reason (optional)</label>
             <input
               className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
               placeholder="Customer reported a defect"
+              aria-label="Refund note"
               value={refundReason}
               onChange={(e) => setRefundReason(e.target.value)}
             />
