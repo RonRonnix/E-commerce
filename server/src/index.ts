@@ -20,6 +20,54 @@ const PAYMONGO_SECRET_KEY = process.env.PAYMONGO_SECRET_KEY
 const PAYMONGO_WEBHOOK_SECRET = process.env.PAYMONGO_WEBHOOK_SECRET
 const PAYMONGO_SKIP_WEBHOOK_SIGNATURE = process.env.PAYMONGO_SKIP_WEBHOOK_SIGNATURE === 'true'
 const PAYMONGO_WEBHOOK_MAX_SKEW_SECONDS = 5 * 60
+const PAYMONGO_TIMEOUT_MS = Number(process.env.PAYMONGO_TIMEOUT_MS ?? 10000)
+const PAYMONGO_RETRY_COUNT = Number(process.env.PAYMONGO_RETRY_COUNT ?? 2)
+
+type LogLevel = 'info' | 'warn' | 'error'
+
+function log(level: LogLevel, message: string, meta: Record<string, unknown> = {}) {
+  const entry = { level, message, time: new Date().toISOString(), ...meta }
+  if (level === 'info') console.log(JSON.stringify(entry))
+  else if (level === 'warn') console.warn(JSON.stringify(entry))
+  else console.error(JSON.stringify(entry))
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function paymongoFetch(url: string, init: RequestInit) {
+  let attempt = 0
+  while (true) {
+    try {
+      const res = await fetchWithTimeout(url, init, PAYMONGO_TIMEOUT_MS)
+      const retryable = [408, 425, 429, 500, 502, 503, 504].includes(res.status)
+      if (retryable && attempt < PAYMONGO_RETRY_COUNT) {
+        await delay(250 * Math.pow(2, attempt))
+        attempt += 1
+        continue
+      }
+      return res
+    } catch (err) {
+      if (attempt < PAYMONGO_RETRY_COUNT) {
+        await delay(250 * Math.pow(2, attempt))
+        attempt += 1
+        continue
+      }
+      throw err
+    }
+  }
+}
 const allowedOrigins = WEB_ORIGIN.split(',').map(o => o.trim()).filter(Boolean)
 app.use(cors({
   origin: (origin, cb) => {
@@ -33,9 +81,30 @@ app.use(cors({
 app.use(cookieParser())
 app.set('json replacer', (_key: string, value: unknown) => (typeof value === 'bigint' ? Number(value) : value))
 app.use((req: Request, res: Response, next) => {
+  const requestId = crypto.randomUUID()
+  ;(req as any).requestId = requestId
+  const start = Date.now()
+  res.on('finish', () => {
+    log('info', 'request', {
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      durationMs: Date.now() - start,
+      ip: req.ip,
+    })
+  })
+  next()
+})
+app.use((req: Request, res: Response, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
   res.setHeader('Referrer-Policy', 'same-origin')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
+    res.setHeader('Content-Security-Policy', "default-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+  }
   next()
 })
 app.post('/api/paymongo/webhook', express.raw({ type: 'application/json' }), asyncHandler(async (req: Request, res: Response) => {
@@ -86,7 +155,7 @@ app.post('/api/paymongo/webhook', express.raw({ type: 'application/json' }), asy
 
   if (!intentId && type === 'payment.paid' && paymentIdFromEvent && PAYMONGO_SECRET_KEY) {
     const auth = Buffer.from(`${PAYMONGO_SECRET_KEY}:`).toString('base64')
-    const payRes = await fetch(`https://api.paymongo.com/v1/payments/${paymentIdFromEvent}`, {
+    const payRes = await paymongoFetch(`https://api.paymongo.com/v1/payments/${paymentIdFromEvent}`, {
       headers: { Authorization: `Basic ${auth}` },
     })
     const payJson: any = await payRes.json().catch(() => null)
@@ -181,6 +250,12 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 })
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 const apiLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 300,
@@ -188,6 +263,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 })
 app.use('/api', apiLimiter)
+app.use('/api/auth/login', loginLimiter)
 app.use('/api/auth', authLimiter, authMiddleware())
 
 // Static serving for uploaded files (dev only)
@@ -219,8 +295,14 @@ const imageFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFi
 const uploadAvatar = multer({ storage, limits: { fileSize: 2 * 1024 * 1024 }, fileFilter: imageFilter })
 const uploadProduct = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 }, fileFilter: imageFilter })
 
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ ok: true, time: new Date().toISOString() })
+app.get('/api/health', async (_req: Request, res: Response) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    res.json({ ok: true, db: 'up', time: new Date().toISOString() })
+  } catch (err: any) {
+    log('error', 'health_check_failed', { message: err?.message })
+    res.status(503).json({ ok: false, db: 'down', time: new Date().toISOString() })
+  }
 })
 
 app.get('/api/csrf', (req: Request, res: Response) => {
@@ -792,7 +874,7 @@ app.post('/api/payments/:id/paymongo', requireAuth, asyncHandler(async (req: Req
     quantity: Number(item.quantity),
   }))
 
-  const sessionRes = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
+  const sessionRes = await paymongoFetch('https://api.paymongo.com/v1/checkout_sessions', {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -842,7 +924,7 @@ app.post('/api/admin/payments/:id/refund', requireAuth, requireRole('admin','own
   const headers = { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' }
   let providerPaymentId = payment.providerPaymentId
   if (!providerPaymentId && payment.reference) {
-    const intentRes = await fetch(`https://api.paymongo.com/v1/payment_intents/${payment.reference}`, { headers })
+    const intentRes = await paymongoFetch(`https://api.paymongo.com/v1/payment_intents/${payment.reference}`, { headers })
     const intentJson: any = await intentRes.json().catch(() => null)
     const intentAttrs = intentJson?.data?.attributes
     providerPaymentId =
@@ -855,14 +937,14 @@ app.post('/api/admin/payments/:id/refund', requireAuth, requireRole('admin','own
   if (!providerPaymentId) return res.status(400).json({ error: 'Missing PayMongo payment id' })
 
   let refundAmount = Number(payment.amountCents)
-  const pmPayRes = await fetch(`https://api.paymongo.com/v1/payments/${providerPaymentId}`, { headers })
+  const pmPayRes = await paymongoFetch(`https://api.paymongo.com/v1/payments/${providerPaymentId}`, { headers })
   const pmPayJson: any = await pmPayRes.json().catch(() => null)
   const pmAmount = pmPayJson?.data?.attributes?.amount
   if (typeof pmAmount === 'number' && Number.isFinite(pmAmount)) {
     refundAmount = pmAmount
   }
 
-  const refundRes = await fetch('https://api.paymongo.com/v1/refunds', {
+  const refundRes = await paymongoFetch('https://api.paymongo.com/v1/refunds', {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -1146,7 +1228,7 @@ app.post('/api/users/me/avatar', requireAuth, uploadAvatar.single('avatar'), asy
 app.post('/api/users/me/password', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const schema = z.object({
     currentPassword: z.string().min(6),
-    newPassword: z.string().min(6),
+    newPassword: z.string().min(8).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/, 'Password must include upper, lower, and number'),
   })
   const parsed = schema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
@@ -1225,8 +1307,16 @@ app.delete('/api/admin/products/:id/images/:imageId', requireAuth, requireRole('
 // Error wrapper to return JSON consistently
 function asyncHandler(fn: (req: Request, res: Response) => Promise<any>) {
   return (req: Request, res: Response) => fn(req, res).catch(err => {
-    console.error(err)
-    res.status(500).json({ error: 'Server error', detail: err?.message })
+    const errorId = crypto.randomUUID()
+    log('error', 'handler_error', {
+      errorId,
+      requestId: (req as any).requestId,
+      method: req.method,
+      path: req.originalUrl,
+      message: err?.message,
+      stack: err?.stack,
+    })
+    res.status(500).json({ error: 'Server error', errorId })
   })
 }
 

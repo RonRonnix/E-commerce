@@ -13,6 +13,11 @@ if (!JWT_SECRET) {
 }
 const JWT_SECRET_VALUE = JWT_SECRET
 
+const passwordSchema = z
+  .string()
+  .min(8)
+  .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/, 'Password must include upper, lower, and number')
+
 type JWTPayload = { uid: string }
 
 export function authMiddleware() {
@@ -36,7 +41,7 @@ export function authMiddleware() {
   })
 
   router.post('/register', async (req: Request, res: Response) => {
-    const schema = z.object({ email: z.string().email(), password: z.string().min(6), fullName: z.string().min(1) })
+    const schema = z.object({ email: z.string().email(), password: passwordSchema, fullName: z.string().min(1) })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const { email, password, fullName } = parsed.data
