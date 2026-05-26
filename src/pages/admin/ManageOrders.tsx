@@ -213,7 +213,7 @@ export default function ManageOrders() {
           <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-xl border-l animate-[slideIn_.2s_ease-out]">
             <div className="flex items-center justify-between px-4 py-3 border-b">
               <div id="order-details-title" className="font-medium">Order Details</div>
-              <button className="px-2 py-1 rounded-md border text-xs" onClick={() => { setDetailsOpen(false); setDetails(null) }}>Close</button>
+              <button className="px-2 py-1 rounded-md border text-xs cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95" onClick={() => { setDetailsOpen(false); setDetails(null) }}>Close</button>
             </div>
             <div className="p-4 space-y-4 overflow-y-auto h-[calc(100%-52px)]">
               {detailsLoading ? (
@@ -286,7 +286,7 @@ export default function ManageOrders() {
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      className="px-3 py-2 rounded-md border text-sm disabled:opacity-60"
+                      className="px-3 py-2 rounded-md border text-sm disabled:opacity-60 cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95"
                       disabled={!canRefund || refunding}
                       onClick={() => setRefundConfirmOpen(true)}
                     >
@@ -320,7 +320,7 @@ export default function ManageOrders() {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                className="px-3 py-2 rounded-md border text-sm"
+                className="px-3 py-2 rounded-md border text-sm cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95"
                 onClick={() => { setRefundConfirmOpen(false); setRefundReason('') }}
                 disabled={refunding}
               >
@@ -328,7 +328,7 @@ export default function ManageOrders() {
               </button>
               <button
                 type="button"
-                className="px-3 py-2 rounded-md bg-black text-white text-sm disabled:opacity-60"
+                className="px-3 py-2 rounded-md bg-black text-white text-sm cursor-pointer transition-transform duration-150 hover:scale-[1.03] active:scale-95 disabled:opacity-60"
                 onClick={submitRefund}
                 disabled={refunding}
               >
